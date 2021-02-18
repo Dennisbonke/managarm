@@ -445,3 +445,12 @@ tail:
 message GetPpidRequest 79 {
 head(128):
 }
+
+message MknodAtRequest 80 {
+head(128):
+	int32 dirfd;
+	int32 mode;
+	int32 device;
+tail:
+	string path;
+}
