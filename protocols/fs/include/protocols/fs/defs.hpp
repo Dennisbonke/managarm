@@ -11,4 +11,4 @@ struct StatusPage {
 	int status;
 };
 
-} // namespace protocols::fs
+}  // namespace protocols::fs

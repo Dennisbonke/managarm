@@ -1,11 +1,11 @@
 #pragma once
 
 #include <arch/mem_space.hpp>
-#include <x86/machine.hpp>
 #include <initgraph.hpp>
 #include <thor-internal/irq.hpp>
 #include <thor-internal/timer.hpp>
 #include <thor-internal/types.hpp>
+#include <x86/machine.hpp>
 
 namespace thor {
 
@@ -14,11 +14,11 @@ namespace thor {
 // --------------------------------------------------------
 
 struct ApicRegisterSpace {
-	constexpr ApicRegisterSpace()
-	: _x2apic{false}, _mem_base(0) { }
+	constexpr ApicRegisterSpace() : _x2apic {false}, _mem_base(0) {}
 
 	ApicRegisterSpace(bool x2apic, void *base = nullptr)
-	: _x2apic{x2apic}, _mem_base{reinterpret_cast<uintptr_t>(base)} { }
+	: _x2apic {x2apic}
+	, _mem_base {reinterpret_cast<uintptr_t>(base)} {}
 
 	template<typename RT>
 	void store(RT r, typename RT::rep_type value) const {
@@ -38,20 +38,20 @@ struct ApicRegisterSpace {
 			auto msr = x2apic_msr_base + (r.offset() >> 4);
 			return static_cast<typename RT::rep_type>(common::x86::rdmsr(msr));
 		} else {
-			auto p = reinterpret_cast<const typename RT::bits_type *>(_mem_base + r.offset());
+			auto p = reinterpret_cast<const typename RT::bits_type *>(
+				_mem_base + r.offset()
+			);
 			auto b = arch::mem_ops<typename RT::bits_type>::load(p);
 			return static_cast<typename RT::rep_type>(b);
 		}
 	}
 
-	bool isUsingX2apic() const {
-		return _x2apic;
-	}
+	bool isUsingX2apic() const { return _x2apic; }
 
 private:
 	bool _x2apic;
 	uintptr_t _mem_base;
-	static constexpr uint32_t x2apic_msr_base = 0x800;
+	constexpr static uint32_t x2apic_msr_base = 0x800;
 };
 
 struct GlobalApicContext {
@@ -63,9 +63,7 @@ struct GlobalApicContext {
 		void arm(uint64_t nanos) override;
 	};
 
-	AlarmTracker *globalAlarm() {
-		return &_globalAlarmInstance;
-	}
+	AlarmTracker *globalAlarm() { return &_globalAlarmInstance; }
 
 private:
 	GlobalAlarmSlot _globalAlarmInstance;
@@ -151,4 +149,4 @@ void acknowledgeIrq(int irq);
 
 IrqPin *getGlobalSystemIrq(size_t n);
 
-} // namespace thor
+}  // namespace thor

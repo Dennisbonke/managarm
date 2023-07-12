@@ -3,25 +3,31 @@
 
 namespace thor {
 
-LaneHandle::LaneHandle(const LaneHandle &other)
-: _stream(other._stream), _lane(other._lane) {
-	if(_stream)
+LaneHandle::LaneHandle(const LaneHandle &other) : _stream(other._stream), _lane(other._lane) {
+	if(_stream) {
 		Stream::incrementPeers(_stream.get(), _lane);
+	}
 }
 
 LaneHandle::~LaneHandle() {
-	if(!_stream)
+	if(!_stream) {
 		return;
+	}
 
-	if(Stream::decrementPeers(_stream.get(), _lane))
+	if(Stream::decrementPeers(_stream.get(), _lane)) {
 		_stream.ctr()->decrement();
+	}
 }
 
-struct OfferAccept { };
-struct ImbueExtract { };
-struct SendRecvInline { };
-struct SendRecvBuffer { };
-struct PushPull { };
+struct OfferAccept {};
+
+struct ImbueExtract {};
+
+struct SendRecvInline {};
+
+struct SendRecvBuffer {};
+
+struct PushPull {};
 
 static void transfer(OfferAccept, StreamNode *offer, StreamNode *accept) {
 	offer->_error = Error::success;
@@ -53,7 +59,7 @@ static void transfer(SendRecvInline, StreamNode *from, StreamNode *to) {
 		to->_error = Error::success;
 		to->_transmitBuffer = std::move(buffer);
 		to->complete();
-	}else{
+	} else {
 		from->_error = Error::bufferTooSmall;
 		from->complete();
 
@@ -104,10 +110,10 @@ void Stream::Submitter::run() {
 			if(s->_laneShutDown[p]) {
 				assert(s->_processQueue[q].empty());
 				laneShutdown = true;
-			}else if(s->_laneBroken[q] || s->_laneShutDown[q]) {
+			} else if(s->_laneBroken[q] || s->_laneShutDown[q]) {
 				assert(s->_processQueue[q].empty());
 				laneBroken = true;
-			}else{
+			} else {
 				// If both lanes have items, we need to process them.
 				// Otherwise, we just queue the new node.
 				if(s->_processQueue[q].empty()) {
@@ -133,20 +139,23 @@ void Stream::Submitter::run() {
 		//       unions to the hel result structs (each struct has at least one
 		//       unsigned int to spare in the error case).
 		if(u->tag() == kTagDismiss || v->tag() == kTagDismiss) {
-			Error uError{};
-			Error vError{};
-			if(u->tag() == kTagDismiss)
+			Error uError {};
+			Error vError {};
+			if(u->tag() == kTagDismiss) {
 				vError = Error::dismissed;
-			if(v->tag() == kTagDismiss)
+			}
+			if(v->tag() == kTagDismiss) {
 				uError = Error::dismissed;
+			}
 			s->_cancelItem(u, uError);
 			s->_cancelItem(v, vError);
 			continue;
 		}
 
 		// Make sure that we only need to consider one permutation of tags.
-		if(getStreamOrientation(u->tag()) < getStreamOrientation(v->tag()))
+		if(getStreamOrientation(u->tag()) < getStreamOrientation(v->tag())) {
 			std::swap(u, v);
+		}
 
 		// Do the main work here, after we released the lock.
 		if(u->tag() == kTagOffer && v->tag() == kTagAccept) {
@@ -157,18 +166,18 @@ void Stream::Submitter::run() {
 			assert(branch.ctr()->check_count() == 1);
 			branch.ctr()->increment();
 			branch.ctr()->increment();
-			u->_lane = LaneHandle{adoptLane, branch, 0};
-			v->_lane = LaneHandle{adoptLane, branch, 1};
+			u->_lane = LaneHandle {adoptLane, branch, 0};
+			v->_lane = LaneHandle {adoptLane, branch, 1};
 
 			enqueue(u->_lane, u->ancillaryChain);
 			enqueue(v->_lane, v->ancillaryChain);
 
-			transfer(OfferAccept{}, u, v);
-		}else if(u->tag() == kTagImbueCredentials && v->tag() == kTagExtractCredentials) {
-			transfer(ImbueExtract{}, u, v);
-		}else if(u->tag() == kTagSendKernelBuffer && v->tag() == kTagRecvKernelBuffer) {
-			transfer(SendRecvInline{}, u, v);
-		}else if(u->tag() == kTagSendFlow && v->tag() == kTagRecvKernelBuffer) {
+			transfer(OfferAccept {}, u, v);
+		} else if(u->tag() == kTagImbueCredentials && v->tag() == kTagExtractCredentials) {
+			transfer(ImbueExtract {}, u, v);
+		} else if(u->tag() == kTagSendKernelBuffer && v->tag() == kTagRecvKernelBuffer) {
+			transfer(SendRecvInline {}, u, v);
+		} else if(u->tag() == kTagSendFlow && v->tag() == kTagRecvKernelBuffer) {
 			if(u->_inBuffer.size() > v->_maxLength) {
 				// Both nodes complete with bufferTooSmall.
 				u->_error = Error::bufferTooSmall;
@@ -177,7 +186,7 @@ void Stream::Submitter::run() {
 				u->issueFlow.raise();
 				v->complete();
 				continue;
-			}else if(!u->_maxLength) {
+			} else if(!u->_maxLength) {
 				u->issueFlow.raise();
 				v->complete();
 				continue;
@@ -185,7 +194,7 @@ void Stream::Submitter::run() {
 
 			u->peerNode = v;
 			u->issueFlow.raise();
-		}else if(u->tag() == kTagSendKernelBuffer && v->tag() == kTagRecvFlow) {
+		} else if(u->tag() == kTagSendKernelBuffer && v->tag() == kTagRecvFlow) {
 			if(u->_inBuffer.size() > v->_maxLength) {
 				// Both nodes complete with bufferTooSmall.
 				u->_error = Error::bufferTooSmall;
@@ -194,7 +203,7 @@ void Stream::Submitter::run() {
 				u->complete();
 				v->issueFlow.raise();
 				continue;
-			}else if(!u->_inBuffer.size()) {
+			} else if(!u->_inBuffer.size()) {
 				u->complete();
 				v->issueFlow.raise();
 				continue;
@@ -202,7 +211,7 @@ void Stream::Submitter::run() {
 
 			v->peerNode = u;
 			v->issueFlow.raise();
-		}else if(u->tag() == kTagSendFlow && v->tag() == kTagRecvFlow) {
+		} else if(u->tag() == kTagSendFlow && v->tag() == kTagRecvFlow) {
 			if(u->_maxLength > v->_maxLength) {
 				// Both nodes complete with bufferTooSmall.
 				u->_error = Error::bufferTooSmall;
@@ -211,7 +220,7 @@ void Stream::Submitter::run() {
 				u->issueFlow.raise();
 				v->issueFlow.raise();
 				continue;
-			}else if(!u->_maxLength) {
+			} else if(!u->_maxLength) {
 				u->issueFlow.raise();
 				v->issueFlow.raise();
 				continue;
@@ -221,20 +230,20 @@ void Stream::Submitter::run() {
 			u->issueFlow.raise();
 			v->peerNode = u;
 			v->issueFlow.raise();
-		}else if(u->tag() == kTagPushDescriptor && v->tag() == kTagPullDescriptor) {
-			transfer(PushPull{}, u, v);
-		}else{
+		} else if(u->tag() == kTagPushDescriptor && v->tag() == kTagPullDescriptor) {
+			transfer(PushPull {}, u, v);
+		} else {
 			u->_error = Error::transmissionMismatch;
 			if(usesFlowProtocol(u->tag())) {
 				u->issueFlow.raise();
-			}else{
+			} else {
 				u->complete();
 			}
 
 			v->_error = Error::transmissionMismatch;
 			if(usesFlowProtocol(v->tag())) {
 				v->issueFlow.raise();
-			}else{
+			} else {
 				v->complete();
 			}
 		}
@@ -248,8 +257,9 @@ void Stream::incrementPeers(Stream *stream, int lane) {
 
 bool Stream::decrementPeers(Stream *stream, int lane) {
 	auto count = stream->_peerCount[lane].fetch_sub(1, std::memory_order_release);
-	if(count > 1)
+	if(count > 1) {
 		return false;
+	}
 
 	std::atomic_thread_fence(std::memory_order_acquire);
 
@@ -258,9 +268,8 @@ bool Stream::decrementPeers(Stream *stream, int lane) {
 		frg::locate_member<
 			StreamNode,
 			frg::default_list_hook<StreamNode>,
-			&StreamNode::processQueueItem
-		>
-	> pending;
+			&StreamNode::processQueueItem>>
+		pending;
 
 	{
 		auto irq_lock = frg::guard(&irqMutex());
@@ -279,15 +288,14 @@ bool Stream::decrementPeers(Stream *stream, int lane) {
 	return true;
 }
 
-Stream::Stream()
-: _laneBroken{false, false}, _laneShutDown{false, false} {
+Stream::Stream() : _laneBroken {false, false}, _laneShutDown {false, false} {
 	_peerCount[0].store(1, std::memory_order_relaxed);
 	_peerCount[1].store(1, std::memory_order_relaxed);
 }
 
 Stream::~Stream() {
-// TODO: remove debugging messages?
-//	infoLogger() << "\e[31mClosing stream\e[0m" << frg::endlog;
+	// TODO: remove debugging messages?
+	//	infoLogger() << "\e[31mClosing stream\e[0m" << frg::endlog;
 }
 
 void Stream::shutdownLane(int lane) {
@@ -296,9 +304,8 @@ void Stream::shutdownLane(int lane) {
 		frg::locate_member<
 			StreamNode,
 			frg::default_list_hook<StreamNode>,
-			&StreamNode::processQueueItem
-		>
-	> pendingOnThisLane, pendingOnOtherLane;
+			&StreamNode::processQueueItem>>
+		pendingOnThisLane, pendingOnOtherLane;
 
 	{
 		auto irq_lock = frg::guard(&irqMutex());
@@ -328,7 +335,7 @@ void Stream::_cancelItem(StreamNode *item, Error error) {
 	item->_error = error;
 	if(usesFlowProtocol(item->tag())) {
 		item->issueFlow.raise();
-	}else{
+	} else {
 		item->complete();
 	}
 
@@ -337,7 +344,7 @@ void Stream::_cancelItem(StreamNode *item, Error error) {
 		item->_error = error;
 		if(usesFlowProtocol(item->tag())) {
 			item->issueFlow.raise();
-		}else{
+		} else {
 			item->complete();
 		}
 	}
@@ -353,5 +360,4 @@ frg::tuple<LaneHandle, LaneHandle> createStream() {
 	return frg::make_tuple(handle1, handle2);
 }
 
-} // namespace thor
-
+}  // namespace thor

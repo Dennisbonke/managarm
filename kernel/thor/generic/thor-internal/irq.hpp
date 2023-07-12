@@ -14,11 +14,10 @@ namespace thor {
 struct AwaitIrqNode {
 	friend struct IrqObject;
 
-	void setup(Worklet *awaited) {
-		_awaited = awaited;
-	}
+	void setup(Worklet *awaited) { _awaited = awaited; }
 
 	Error error() { return _error; }
+
 	uint64_t sequence() { return _sequence; }
 
 private:
@@ -37,9 +36,7 @@ struct IrqPin;
 // Represents a slot in the CPU's interrupt table.
 // Slots might be global or per-CPU.
 struct IrqSlot {
-	bool isAvailable() {
-		return _pin == nullptr;
-	}
+	bool isAvailable() { return _pin == nullptr; }
 
 	// Links an IrqPin to this slot.
 	// From now on all IRQ raises will go to this IrqPin.
@@ -48,9 +45,7 @@ struct IrqSlot {
 	// The kernel calls this function when an IRQ is raised.
 	void raise();
 
-	IrqPin *pin() {
-		return _pin;
-	}
+	IrqPin *pin() { return _pin; }
 
 private:
 	IrqPin *_pin = nullptr;
@@ -71,15 +66,11 @@ enum class Polarity {
 };
 
 struct IrqConfiguration {
-	bool specified() {
-		return trigger != TriggerMode::null
-				&& polarity != Polarity::null;
-	}
+	bool specified() { return trigger != TriggerMode::null && polarity != Polarity::null; }
 
 	bool compatible(IrqConfiguration other) {
 		assert(specified());
-		return trigger == other.trigger
-				&& polarity == other.polarity;
+		return trigger == other.trigger && polarity == other.polarity;
 	}
 
 	TriggerMode trigger = TriggerMode::null;
@@ -100,9 +91,7 @@ struct IrqSink {
 
 	IrqSink(frg::string<KernelAlloc> name);
 
-	const frg::string<KernelAlloc> &name() {
-		return _name;
-	}
+	const frg::string<KernelAlloc> &name() { return _name; }
 
 	// This method is called with sinkMutex() held.
 	virtual IrqStatus raise() = 0;
@@ -115,14 +104,10 @@ struct IrqSink {
 	frg::default_list_hook<IrqSink> hook;
 
 protected:
-	frg::ticket_spinlock *sinkMutex() {
-		return &_mutex;
-	}
+	frg::ticket_spinlock *sinkMutex() { return &_mutex; }
 
 	// Protected by the pin->_mutex and sinkMutex().
-	uint64_t currentSequence() {
-		return _currentSequence;
-	}
+	uint64_t currentSequence() { return _currentSequence; }
 
 	~IrqSink() = default;
 
@@ -150,9 +135,9 @@ enum class IrqStrategy {
 // This class handles the IRQ configuration and acknowledgement.
 struct IrqPin {
 private:
-	static constexpr int maskedForService = 1;
-	static constexpr int maskedWhileBuffered = 2;
-	static constexpr int maskedForNack = 4;
+	constexpr static int maskedForService = 1;
+	constexpr static int maskedWhileBuffered = 2;
+	constexpr static int maskedForNack = 4;
 
 public:
 	static void attachSink(IrqPin *pin, IrqSink *sink);
@@ -165,11 +150,9 @@ public:
 
 	IrqPin(const IrqPin &) = delete;
 
-	IrqPin &operator= (const IrqPin &) = delete;
+	IrqPin &operator=(const IrqPin &) = delete;
 
-	const frg::string<KernelAlloc> &name() {
-		return _name;
-	}
+	const frg::string<KernelAlloc> &name() { return _name; }
 
 	void configure(IrqConfiguration cfg);
 
@@ -235,17 +218,12 @@ private:
 	// TODO: This list should change rarely. Use a RCU list.
 	frg::intrusive_list<
 		IrqSink,
-		frg::locate_member<
-			IrqSink,
-			frg::default_list_hook<IrqSink>,
-			&IrqSink::hook
-		>
-	> _sinkList;
+		frg::locate_member<IrqSink, frg::default_list_hook<IrqSink>, &IrqSink::hook>>
+		_sinkList;
 };
 
 struct MsiPin : IrqPin {
-	MsiPin(frg::string<KernelAlloc> name)
-	: IrqPin{std::move(name)} { }
+	MsiPin(frg::string<KernelAlloc> name) : IrqPin {std::move(name)} {}
 
 	virtual uint64_t getMessageAddress() = 0;
 	virtual uint32_t getMessageData() = 0;
@@ -273,17 +251,32 @@ struct IrqObject : IrqSink {
 	template<typename Receiver>
 	struct AwaitIrqOperation : AwaitIrqNode {
 		AwaitIrqOperation(IrqObject *object, uint64_t sequence, WorkQueue *wq, Receiver r)
-		: object_{object}, sequence_{sequence}, wq_{wq}, r_{std::move(r)} { }
+		: object_ {object}
+		, sequence_ {sequence}
+		, wq_ {wq}
+		, r_ {std::move(r)} {}
 
 		void start() {
-			worklet_.setup([] (Worklet *base) {
-				auto self = frg::container_of(base, &AwaitIrqOperation::worklet_);
-				if(self->error() != Error::success) {
-					async::execution::set_value(self->r_, self->error());
-				}else{
-					async::execution::set_value(self->r_, self->sequence());
-				}
-			}, wq_);
+			worklet_.setup(
+				[](Worklet *base) {
+					auto self = frg::container_of(
+						base,
+						&AwaitIrqOperation::worklet_
+					);
+					if(self->error() != Error::success) {
+						async::execution::set_value(
+							self->r_,
+							self->error()
+						);
+					} else {
+						async::execution::set_value(
+							self->r_,
+							self->sequence()
+						);
+					}
+				},
+				wq_
+			);
 			setup(&worklet_);
 			object_->submitAwait(this, sequence_);
 		}
@@ -305,7 +298,7 @@ struct IrqObject : IrqSink {
 		}
 
 		friend async::sender_awaiter<AwaitIrqSender, frg::expected<Error, uint64_t>>
-		operator co_await (AwaitIrqSender s) {
+		operator co_await(AwaitIrqSender s) {
 			return {s};
 		}
 
@@ -314,9 +307,7 @@ struct IrqObject : IrqSink {
 		WorkQueue *wq;
 	};
 
-	AwaitIrqSender awaitIrq(uint64_t sequence, WorkQueue *wq) {
-		return {this, sequence, wq};
-	}
+	AwaitIrqSender awaitIrq(uint64_t sequence, WorkQueue *wq) { return {this, sequence, wq}; }
 
 private:
 	smarter::shared_ptr<BoundKernlet> _automationKernlet;
@@ -327,17 +318,15 @@ private:
 		frg::locate_member<
 			AwaitIrqNode,
 			frg::default_list_hook<AwaitIrqNode>,
-			&AwaitIrqNode::_queueNode
-		>
-	> _waitQueue;
+			&AwaitIrqNode::_queueNode>>
+		_waitQueue;
 
 protected:
 	~IrqObject() = default;
 };
 
 struct GenericIrqObject final : IrqObject {
-	GenericIrqObject(frg::string<KernelAlloc> name)
-	: IrqObject{name} { }
+	GenericIrqObject(frg::string<KernelAlloc> name) : IrqObject {name} {}
 };
 
-} // namespace thor
+}  // namespace thor

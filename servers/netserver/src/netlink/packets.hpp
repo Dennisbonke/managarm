@@ -12,12 +12,14 @@
 
 template<typename T>
 std::optional<const T *> netlinkMessage(const struct nlmsghdr *header, int length) {
-	if(!NLMSG_OK(header, static_cast<uint32_t>(length)))
+	if(!NLMSG_OK(header, static_cast<uint32_t>(length))) {
 		return std::nullopt;
+	}
 
-	if(length <= 0 || static_cast<uint32_t>(length) < (NLMSG_HDRLEN + sizeof(T)))
+	if(length <= 0 || static_cast<uint32_t>(length) < (NLMSG_HDRLEN + sizeof(T))) {
 		return std::nullopt;
-	return reinterpret_cast<const T*>(NLMSG_DATA(header));
+	}
+	return reinterpret_cast<const T *>(NLMSG_DATA(header));
 }
 
 /**
@@ -26,9 +28,7 @@ std::optional<const T *> netlinkMessage(const struct nlmsghdr *header, int lengt
 struct NetlinkBuilder {
 	inline void header(uint16_t type, uint16_t flags, uint32_t seq, uint32_t pid) {
 		struct nlmsghdr hdr {
-			.nlmsg_type = type,
-			.nlmsg_flags = flags,
-			.nlmsg_seq = seq,
+			.nlmsg_type = type, .nlmsg_flags = flags, .nlmsg_seq = seq,
 			.nlmsg_pid = pid,
 		};
 
@@ -74,7 +74,9 @@ struct NetlinkBuilder {
 
 		_packet.buffer.resize(_offset + attr.rta_len);
 		memcpy(_packet.buffer.data() + _offset, &attr, sizeof(struct rtattr));
-		memcpy(_packet.buffer.data() + _offset + sizeof(struct rtattr), data.c_str(), str_len);
+		memcpy(_packet.buffer.data() + _offset + sizeof(struct rtattr),
+		       data.c_str(),
+		       str_len);
 		_offset += attr.rta_len;
 
 		buffer_align();
@@ -84,12 +86,13 @@ struct NetlinkBuilder {
 		memcpy(_packet.buffer.data(), &_offset, sizeof(uint32_t));
 		return std::move(_packet);
 	}
+
 private:
 	/**
 	 * Align the buffer to the netlink message alignment.
 	 */
 	inline void buffer_align() {
-		auto size = NLMSG_ALIGN(_offset); // NLMSG_ALIGN only aligns up
+		auto size = NLMSG_ALIGN(_offset);  // NLMSG_ALIGN only aligns up
 		if(_offset != size) {
 			_packet.buffer.resize(size);
 			memset(_packet.buffer.data() + _offset, 0, size - _offset);
@@ -104,11 +107,15 @@ private:
 /**
  * Helper class to retrieve `struct rtattr`s from a netlink message
  *
- * This class mostly serves to implement an Iterator for attributes. The Iterator returns instances of `Attr` to allow safe access to attributes.
+ * This class mostly serves to implement an Iterator for attributes. The Iterator returns instances
+ * of `Attr` to allow safe access to attributes.
  */
 template<typename T>
 struct NetlinkAttrs {
-	explicit NetlinkAttrs(const struct nlmsghdr *hdr, const T *s, const struct rtattr *attrs) : _hdr{hdr}, _s{s}, _attrs{attrs} {};
+	explicit NetlinkAttrs(const struct nlmsghdr *hdr, const T *s, const struct rtattr *attrs)
+	: _hdr {hdr}
+	, _s {s}
+	, _attrs {attrs} {};
 
 	struct Iterator;
 
@@ -123,24 +130,23 @@ struct NetlinkAttrs {
 		 *
 		 * This is not marked explicit to allow for implicit conversion.
 		 */
-		Attr(const struct rtattr *attr) : _attr{attr} { };
+		Attr(const struct rtattr *attr) : _attr {attr} {};
 
 		/**
 		 * Returns the `rta_type` of the attribute
 		 */
-		unsigned short type() const {
-			return _attr->rta_type;
-		}
+		unsigned short type() const { return _attr->rta_type; }
 
 		/**
 		 * Type-safe and bounds-checked access to attribute data.
 		 */
 		template<typename D>
 		std::optional<D> data() const {
-			if(length() >= RTA_LENGTH(sizeof(D)))
-				return { *reinterpret_cast<D *>(RTA_DATA(_attr)) };
-			else
+			if(length() >= RTA_LENGTH(sizeof(D))) {
+				return {*reinterpret_cast<D *>(RTA_DATA(_attr))};
+			} else {
 				return std::nullopt;
+			}
 		}
 
 		/**
@@ -148,11 +154,13 @@ struct NetlinkAttrs {
 		 */
 		std::optional<std::string> str() const {
 			/* Assert that there is even a string to begin with */
-			if(length() < RTA_LENGTH(1))
+			if(length() < RTA_LENGTH(1)) {
 				return std::nullopt;
+			}
 			/* Assert that the string length actually matches the attr length */
-			if(length() < RTA_LENGTH(strlen((const char *) RTA_DATA(_attr))))
+			if(length() < RTA_LENGTH(strlen((const char *) RTA_DATA(_attr)))) {
 				return std::nullopt;
+			}
 			return std::string((const char *) RTA_DATA(_attr));
 		}
 
@@ -160,11 +168,10 @@ struct NetlinkAttrs {
 		/**
 		 * Return the length of this `struct rtattr`.
 		 *
-		 * As consumers should not care about the length of an attribute (as they should not do pointer arithmetic on this anyways), this is marked private.
+		 * As consumers should not care about the length of an attribute (as they should not
+		 * do pointer arithmetic on this anyways), this is marked private.
 		 */
-		size_t length() const {
-			return _attr->rta_len;
-		}
+		size_t length() const { return _attr->rta_len; }
 
 		const struct rtattr *_attr;
 	};
@@ -176,7 +183,7 @@ struct NetlinkAttrs {
 		using pointer = value_type *;
 		using reference = value_type &;
 
-		Iterator(value_type val) : _val{val} { };
+		Iterator(value_type val) : _val {val} {};
 
 		Iterator &operator++() {
 			size_t dummy = _val.length();
@@ -184,26 +191,32 @@ struct NetlinkAttrs {
 			return *this;
 		}
 
-		reference operator*() {
-			return _val;
-		}
+		reference operator*() { return _val; }
 
-		friend bool operator== (const Iterator& a, const Iterator& b) { return a._val._attr == b._val._attr; };
-    	friend bool operator!= (const Iterator& a, const Iterator& b) { return a._val._attr != b._val._attr; };
+		friend bool operator==(const Iterator &a, const Iterator &b) {
+			return a._val._attr == b._val._attr;
+		};
+
+		friend bool operator!=(const Iterator &a, const Iterator &b) {
+			return a._val._attr != b._val._attr;
+		};
+
 	private:
 		value_type _val;
 	};
 
 	Iterator begin() {
-		if(_attrs)
-			return Iterator{_attrs.value()};
+		if(_attrs) {
+			return Iterator {_attrs.value()};
+		}
 		return end();
 	}
 
 	Iterator end() {
 		auto ptr = uintptr_t(_hdr) + _hdr->nlmsg_len;
-		return Iterator{reinterpret_cast<const struct rtattr *>(ptr)};
+		return Iterator {reinterpret_cast<const struct rtattr *>(ptr)};
 	}
+
 private:
 	const struct nlmsghdr *_hdr;
 	const T *_s;
@@ -211,41 +224,46 @@ private:
 };
 
 namespace nl::packets {
-	struct ifaddr{};
-	struct ifinfo{};
-	struct rt{};
-}
+struct ifaddr {};
 
-inline std::optional<NetlinkAttrs<struct ifaddrmsg>> NetlinkAttr(struct nlmsghdr *hdr, struct nl::packets::ifaddr) {
+struct ifinfo {};
+
+struct rt {};
+}  // namespace nl::packets
+
+inline std::optional<NetlinkAttrs<struct ifaddrmsg>>
+NetlinkAttr(struct nlmsghdr *hdr, struct nl::packets::ifaddr) {
 	const struct ifaddrmsg *msg;
 
-	if(auto opt = netlinkMessage<struct ifaddrmsg>(hdr, hdr->nlmsg_len))
+	if(auto opt = netlinkMessage<struct ifaddrmsg>(hdr, hdr->nlmsg_len)) {
 		msg = *opt;
-	else {
+	} else {
 		return std::nullopt;
 	}
 
 	return NetlinkAttrs<struct ifaddrmsg>(hdr, msg, IFA_RTA(msg));
 }
 
-inline std::optional<NetlinkAttrs<struct ifinfomsg>> NetlinkAttr(struct nlmsghdr *hdr, struct nl::packets::ifinfo) {
+inline std::optional<NetlinkAttrs<struct ifinfomsg>>
+NetlinkAttr(struct nlmsghdr *hdr, struct nl::packets::ifinfo) {
 	const struct ifinfomsg *msg;
 
-	if(auto opt = netlinkMessage<struct ifinfomsg>(hdr, hdr->nlmsg_len))
+	if(auto opt = netlinkMessage<struct ifinfomsg>(hdr, hdr->nlmsg_len)) {
 		msg = *opt;
-	else {
+	} else {
 		return std::nullopt;
 	}
 
 	return NetlinkAttrs<struct ifinfomsg>(hdr, msg, IFLA_RTA(msg));
 }
 
-inline std::optional<NetlinkAttrs<struct rtmsg>> NetlinkAttr(struct nlmsghdr *hdr, struct nl::packets::rt) {
+inline std::optional<NetlinkAttrs<struct rtmsg>>
+NetlinkAttr(struct nlmsghdr *hdr, struct nl::packets::rt) {
 	const struct rtmsg *msg;
 
-	if(auto opt = netlinkMessage<struct rtmsg>(hdr, hdr->nlmsg_len))
+	if(auto opt = netlinkMessage<struct rtmsg>(hdr, hdr->nlmsg_len)) {
 		msg = *opt;
-	else {
+	} else {
 		return std::nullopt;
 	}
 

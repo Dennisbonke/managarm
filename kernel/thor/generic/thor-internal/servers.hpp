@@ -10,4 +10,4 @@ void initializeMbusStream();
 coroutine<void> runMbus();
 coroutine<LaneHandle> runServer(frg::string_view name);
 
-} // namespace thor
+}  // namespace thor

@@ -5,4 +5,4 @@ namespace thor {
 void initializeTimers();
 void initTimerOnThisCpu();
 
-} // namespace thor
+}  // namespace thor

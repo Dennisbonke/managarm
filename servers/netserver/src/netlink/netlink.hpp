@@ -1,19 +1,18 @@
 #pragma once
 
-#include <async/result.hpp>
+#include "ip/arp.hpp"
+#include "ip/ip4.hpp"
+
 #include <async/recurring-event.hpp>
+#include <async/result.hpp>
+#include <deque>
 #include <errno.h>
-#include <protocols/fs/server.hpp>
-#include <netserver/nic.hpp>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
-
-#include "ip/ip4.hpp"
-#include "ip/arp.hpp"
-
-#include <deque>
-#include <vector>
+#include <netserver/nic.hpp>
+#include <protocols/fs/server.hpp>
 #include <utility>
+#include <vector>
 
 namespace nl {
 struct Packet {
@@ -27,17 +26,28 @@ class NetlinkSocket {
 public:
 	NetlinkSocket(int flags);
 
-	static async::result<protocols::fs::RecvResult> recvMsg(void *obj,
-			const char *creds, uint32_t flags, void *data,
-			size_t len, void *addr_buf, size_t addr_size, size_t max_ctrl_len);
+	static async::result<protocols::fs::RecvResult>
+	recvMsg(void *obj,
+		const char *creds,
+		uint32_t flags,
+		void *data,
+		size_t len,
+		void *addr_buf,
+		size_t addr_size,
+		size_t max_ctrl_len);
 
-	static async::result<frg::expected<protocols::fs::Error, size_t>> sendMsg(void *obj,
-			const char *creds, uint32_t flags, void *data, size_t len,
-			void *addr_ptr, size_t addr_size, std::vector<uint32_t> fds);
+	static async::result<frg::expected<protocols::fs::Error, size_t>>
+	sendMsg(void *obj,
+		const char *creds,
+		uint32_t flags,
+		void *data,
+		size_t len,
+		void *addr_ptr,
+		size_t addr_size,
+		std::vector<uint32_t> fds);
 
-
-	static async::result<protocols::fs::Error> bind(void *obj, const char *creds,
-			const void *addr_ptr, size_t addr_length) {
+	static async::result<protocols::fs::Error>
+	bind(void *obj, const char *creds, const void *addr_ptr, size_t addr_length) {
 		co_return protocols::fs::Error::none;
 	}
 
@@ -63,7 +73,8 @@ private:
 	void getNeighbor(struct nlmsghdr *hdr);
 
 	void sendLinkPacket(std::shared_ptr<nic::Link> nic, void *h);
-	void sendAddrPacket(const struct nlmsghdr *hdr, const struct ifaddrmsg *msg, std::shared_ptr<nic::Link>);
+	void
+	sendAddrPacket(const struct nlmsghdr *hdr, const struct ifaddrmsg *msg, std::shared_ptr<nic::Link>);
 	void sendRoutePacket(const struct nlmsghdr *hdr, Ip4Router::Route &route);
 	void sendNeighPacket(const struct nlmsghdr *hdr, uint32_t addr, Neighbours::Entry &entry);
 
@@ -82,4 +93,4 @@ private:
 	std::deque<nl::Packet> _recvQueue;
 };
 
-} // namespace nl
+}  // namespace nl

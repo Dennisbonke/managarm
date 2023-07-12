@@ -1,50 +1,49 @@
 
 #ifdef __x86_64__
-#include <arch/io_space.hpp>
-#include <thor-internal/arch/hpet.hpp>
+#	include <arch/io_space.hpp>
+#	include <thor-internal/arch/hpet.hpp>
 #endif
+#include <bragi/helpers-all.hpp>
+#include <bragi/helpers-frigg.hpp>
+#include <hw.frigg_bragi.hpp>
+#include <lai/helpers/pm.h>
+#include <mbus.frigg_pb.hpp>
+#include <thor-internal/acpi/pm-interface.hpp>
 #include <thor-internal/fiber.hpp>
 #include <thor-internal/io.hpp>
 #include <thor-internal/kernel_heap.hpp>
 #include <thor-internal/stream.hpp>
-#include <thor-internal/acpi/pm-interface.hpp>
-#include <hw.frigg_bragi.hpp>
-#include <mbus.frigg_pb.hpp>
-
-#include <bragi/helpers-all.hpp>
-#include <bragi/helpers-frigg.hpp>
-
-#include <lai/helpers/pm.h>
 
 namespace thor {
-	// TODO: Move this to a header file.
-	extern frg::manual_box<LaneHandle> mbusClient;
-}
+// TODO: Move this to a header file.
+extern frg::manual_box<LaneHandle> mbusClient;
+}  // namespace thor
 
 namespace thor::acpi {
 
 #ifdef __x86_64__
-inline constexpr arch::scalar_register<uint8_t> ps2Command(0x64);
+constexpr inline arch::scalar_register<uint8_t> ps2Command(0x64);
 
 constexpr uint8_t ps2Reset = 0xFE;
 
 void issuePs2Reset() {
 	arch::io_space space;
 	space.store(ps2Command, ps2Reset);
-	pollSleepNano(100'000'000); // 100ms should be long enough to actually reset.
+	pollSleepNano(100'000'000);  // 100ms should be long enough to actually reset.
 }
 #endif
 
 namespace {
 
 coroutine<bool> handleReq(LaneHandle lane) {
-	auto [acceptError, conversation] = co_await AcceptSender{lane};
-	if(acceptError == Error::endOfLane)
+	auto [acceptError, conversation] = co_await AcceptSender {lane};
+	if(acceptError == Error::endOfLane) {
 		co_return false;
+	}
 	// TODO: improve error handling here.
 	assert(acceptError == Error::success);
 
-	auto [reqError, reqBuffer] = co_await RecvBufferSender{conversation};
+	auto [reqError, reqBuffer] = co_await RecvBufferSender {conversation};
 	// TODO: improve error handling here.
 	assert(reqError == Error::success);
 
@@ -52,24 +51,30 @@ coroutine<bool> handleReq(LaneHandle lane) {
 	assert(!preamble.error());
 
 	if(preamble.id() == bragi::message_id<managarm::hw::PmResetRequest>) {
-		auto req = bragi::parse_head_only<managarm::hw::PmResetRequest>(reqBuffer, *kernelAlloc);
+		auto req = bragi::parse_head_only<managarm::hw::PmResetRequest>(
+			reqBuffer,
+			*kernelAlloc
+		);
 
-		if (!req) {
-			infoLogger() << "thor: Closing lane due to illegal HW request." << frg::endlog;
+		if(!req) {
+			infoLogger()
+				<< "thor: Closing lane due to illegal HW request." << frg::endlog;
 			co_return true;
 		}
 
-		if(lai_acpi_reset())
+		if(lai_acpi_reset()) {
 			infoLogger() << "thor: ACPI reset failed" << frg::endlog;
+		}
 
 #ifdef __x86_64__
 		issuePs2Reset();
 		infoLogger() << "thor: Reset using PS/2 controller failed" << frg::endlog;
 #endif
 		panicLogger() << "thor: We do not know how to reset" << frg::endlog;
-	}else{
-		infoLogger() << "thor: Dismissing conversation due to illegal HW request." << frg::endlog;
-		co_await DismissSender{conversation};
+	} else {
+		infoLogger() << "thor: Dismissing conversation due to illegal HW request."
+			     << frg::endlog;
+		co_await DismissSender {conversation};
 	}
 
 	co_return true;
@@ -80,7 +85,7 @@ coroutine<bool> handleReq(LaneHandle lane) {
 // ------------------------------------------------------------------------
 
 coroutine<LaneHandle> createObject(LaneHandle mbusLane) {
-	auto [offerError, conversation] = co_await OfferSender{mbusLane};
+	auto [offerError, conversation] = co_await OfferSender {mbusLane};
 	// TODO: improve error handling here.
 	assert(offerError == Error::success);
 
@@ -96,20 +101,20 @@ coroutine<LaneHandle> createObject(LaneHandle mbusLane) {
 
 	frg::string<KernelAlloc> ser(*kernelAlloc);
 	req.SerializeToString(&ser);
-	frg::unique_memory<KernelAlloc> reqBuffer{*kernelAlloc, ser.size()};
+	frg::unique_memory<KernelAlloc> reqBuffer {*kernelAlloc, ser.size()};
 	memcpy(reqBuffer.data(), ser.data(), ser.size());
-	auto reqError = co_await SendBufferSender{conversation, std::move(reqBuffer)};
+	auto reqError = co_await SendBufferSender {conversation, std::move(reqBuffer)};
 	// TODO: improve error handling here.
 	assert(reqError == Error::success);
 
-	auto [respError, respBuffer] = co_await RecvBufferSender{conversation};
+	auto [respError, respBuffer] = co_await RecvBufferSender {conversation};
 	// TODO: improve error handling here.
 	assert(respError == Error::success);
 	managarm::mbus::SvrResponse<KernelAlloc> resp(*kernelAlloc);
 	resp.ParseFromArray(respBuffer.data(), respBuffer.size());
 	assert(resp.error() == managarm::mbus::Error::SUCCESS);
 
-	auto [descError, descriptor] = co_await PullDescriptorSender{conversation};
+	auto [descError, descriptor] = co_await PullDescriptorSender {conversation};
 	// TODO: improve error handling here.
 	assert(descError == Error::success);
 	assert(descriptor.is<LaneDescriptor>());
@@ -117,11 +122,11 @@ coroutine<LaneHandle> createObject(LaneHandle mbusLane) {
 }
 
 coroutine<void> handleBind(LaneHandle objectLane) {
-	auto [acceptError, conversation] = co_await AcceptSender{objectLane};
+	auto [acceptError, conversation] = co_await AcceptSender {objectLane};
 	// TODO: improve error handling here.
 	assert(acceptError == Error::success);
 
-	auto [reqError, reqBuffer] = co_await RecvBufferSender{conversation};
+	auto [reqError, reqBuffer] = co_await RecvBufferSender {conversation};
 	// TODO: improve error handling here.
 	assert(reqError == Error::success);
 	managarm::mbus::SvrRequest<KernelAlloc> req(*kernelAlloc);
@@ -133,37 +138,39 @@ coroutine<void> handleBind(LaneHandle objectLane) {
 
 	frg::string<KernelAlloc> ser(*kernelAlloc);
 	resp.SerializeToString(&ser);
-	frg::unique_memory<KernelAlloc> respBuffer{*kernelAlloc, ser.size()};
+	frg::unique_memory<KernelAlloc> respBuffer {*kernelAlloc, ser.size()};
 	memcpy(respBuffer.data(), ser.data(), ser.size());
-	auto respError = co_await SendBufferSender{conversation, std::move(respBuffer)};
+	auto respError = co_await SendBufferSender {conversation, std::move(respBuffer)};
 	// TODO: improve error handling here.
 	assert(respError == Error::success);
 
 	auto stream = createStream();
-	auto descError = co_await PushDescriptorSender{conversation,
-			LaneDescriptor{stream.get<1>()}};
+	auto descError =
+		co_await PushDescriptorSender {conversation, LaneDescriptor {stream.get<1>()}};
 	// TODO: improve error handling here.
 	assert(descError == Error::success);
 
-	async::detach_with_allocator(*kernelAlloc, [] (LaneHandle lane) -> coroutine<void> {
+	async::detach_with_allocator(*kernelAlloc, [](LaneHandle lane) -> coroutine<void> {
 		while(true) {
-			if(!(co_await handleReq(lane)))
+			if(!(co_await handleReq(lane))) {
 				break;
+			}
 		}
 	}(std::move(stream.get<0>())));
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 void initializePmInterface() {
 	// Create a fiber to manage requests to the RTC mbus object.
 	KernelFiber::run([=] {
-		async::detach_with_allocator(*kernelAlloc, [] () -> coroutine<void> {
+		async::detach_with_allocator(*kernelAlloc, []() -> coroutine<void> {
 			auto objectLane = co_await createObject(*mbusClient);
-			while(true)
+			while(true) {
 				co_await handleBind(objectLane);
+			}
 		}());
 	});
 }
 
-} // namespace thor::acpi
+}  // namespace thor::acpi

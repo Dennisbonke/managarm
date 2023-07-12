@@ -2,8 +2,8 @@
 
 namespace thor {
 
-static inline constexpr int numIrqSlots = 1020;
+constexpr inline static int numIrqSlots = 1020;
 
 void initializeArchitecture();
 
-} // namespace thor
+}  // namespace thor

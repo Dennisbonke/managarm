@@ -1,12 +1,12 @@
 #pragma once
 
+#include <assert.h>
 #include <frg/array.hpp>
 #include <frg/list.hpp>
-#include <assert.h>
 
 namespace initgraph {
 
-inline constexpr bool printDotAnnotations = false;
+constexpr inline bool printDotAnnotations = false;
 
 struct Node;
 struct Edge;
@@ -23,16 +23,14 @@ struct Edge {
 	friend struct Engine;
 	friend void realizeEdge(Edge *edge);
 
-	Edge(Node *source, Node *target)
-	: source_{source}, target_{target} {
-		realizeEdge(this);
-	}
+	Edge(Node *source, Node *target) : source_ {source}, target_ {target} { realizeEdge(this); }
 
 	Edge(const Edge &) = delete;
 
-	Edge &operator= (const Edge &) = delete;
+	Edge &operator=(const Edge &) = delete;
 
 	Node *source() { return source_; }
+
 	Node *target() { return target_; }
 
 private:
@@ -49,21 +47,24 @@ struct Node {
 	friend void realizeEdge(Edge *edge);
 
 	Node(NodeType type, Engine *engine, const char *displayName = nullptr)
-	: type_{type}, engine_{engine}, displayName_{displayName} {
+	: type_ {type}
+	, engine_ {engine}
+	, displayName_ {displayName} {
 		realizeNode(this);
 	}
 
 	Node(const Node &) = delete;
 
-	Node &operator= (const Node &) = delete;
+	Node &operator=(const Node &) = delete;
 
 	NodeType type() { return type_; }
+
 	Engine *engine() { return engine_; }
 
 	const char *displayName() { return displayName_; }
 
 protected:
-	virtual void activate() { };
+	virtual void activate() {};
 
 	~Node() = default;
 
@@ -75,21 +76,13 @@ private:
 
 	frg::intrusive_list<
 		Edge,
-		frg::locate_member<
-			Edge,
-			frg::default_list_hook<Edge>,
-			&Edge::outHook_
-		>
-	> outList_;
+		frg::locate_member<Edge, frg::default_list_hook<Edge>, &Edge::outHook_>>
+		outList_;
 
 	frg::intrusive_list<
 		Edge,
-		frg::locate_member<
-			Edge,
-			frg::default_list_hook<Edge>,
-			&Edge::inHook_
-		>
-	> inList_;
+		frg::locate_member<Edge, frg::default_list_hook<Edge>, &Edge::inHook_>>
+		inList_;
 
 	frg::default_list_hook<Node> nodesHook_;
 	frg::default_list_hook<Node> queueHook_;
@@ -109,23 +102,24 @@ struct Engine {
 protected:
 	~Engine() = default;
 
-	virtual void onRealizeNode(Node *node) { (void)node; };
-	virtual void onRealizeEdge(Edge *edge) { (void)edge; };
-	virtual void preActivate(Node *node) { (void)node; };
-	virtual void postActivate(Node *node) { (void)node; };
-	virtual void reportUnreached(Node *node) { (void)node; };
+	virtual void onRealizeNode(Node *node) { (void) node; };
+
+	virtual void onRealizeEdge(Edge *edge) { (void) edge; };
+
+	virtual void preActivate(Node *node) { (void) node; };
+
+	virtual void postActivate(Node *node) { (void) node; };
+
+	virtual void reportUnreached(Node *node) { (void) node; };
+
 	virtual void onUnreached() { __builtin_trap(); }
 
 public:
 	void run(Node *goal = nullptr) {
 		frg::intrusive_list<
 			Node,
-			frg::locate_member<
-				Node,
-				frg::default_list_hook<Node>,
-				&Node::queueHook_
-			>
-		> q;
+			frg::locate_member<Node, frg::default_list_hook<Node>, &Node::queueHook_>>
+			q;
 
 		// First, identify all nodes that we want to run.
 		if(goal) {
@@ -134,7 +128,7 @@ public:
 				goal->wanted_ = true;
 			}
 
-			while(!q.empty())  {
+			while(!q.empty()) {
 				auto node = q.pop_front();
 
 				// We also want the dependencies of the current node.
@@ -145,21 +139,25 @@ public:
 					}
 				}
 			}
-		}else{
+		} else {
 			// If no goal is defined, we pick all nodes.
-			for(auto node : nodes_)
+			for(auto node : nodes_) {
 				node->wanted_ = true;
+			}
 		}
 
 		for(auto node : nodes_) {
-			if(!node->wanted_)
+			if(!node->wanted_) {
 				continue;
+			}
 			// Skip nodes that ran in a previous call to run().
-			if(node->done_)
+			if(node->done_) {
 				continue;
+			}
 
-			if(!node->nUnsatisfied)
+			if(!node->nUnsatisfied) {
 				pending_.push_back(node);
+			}
 		}
 
 		// Now, run pending nodes until no such nodes remain.
@@ -180,43 +178,40 @@ public:
 
 				assert(successor->nUnsatisfied);
 				--successor->nUnsatisfied;
-				if(successor->wanted_ && !successor->done_ && !successor->nUnsatisfied)
+				if(successor->wanted_ && !successor->done_
+				   && !successor->nUnsatisfied) {
 					pending_.push_back(successor);
+				}
 			}
 		}
 
 		unsigned int nUnreached = 0;
 		for(auto node : nodes_) {
-			if(!node->wanted_)
+			if(!node->wanted_) {
 				continue;
-			if(node->done_)
+			}
+			if(node->done_) {
 				continue;
+			}
 			reportUnreached(node);
 			++nUnreached;
 		}
 
-		if(nUnreached)
+		if(nUnreached) {
 			onUnreached();
+		}
 	}
 
 private:
 	frg::intrusive_list<
 		Node,
-		frg::locate_member<
-			Node,
-			frg::default_list_hook<Node>,
-			&Node::nodesHook_
-		>
-	> nodes_;
+		frg::locate_member<Node, frg::default_list_hook<Node>, &Node::nodesHook_>>
+		nodes_;
 
 	frg::intrusive_list<
 		Node,
-		frg::locate_member<
-			Node,
-			frg::default_list_hook<Node>,
-			&Node::queueHook_
-		>
-	> pending_;
+		frg::locate_member<Node, frg::default_list_hook<Node>, &Node::queueHook_>>
+		pending_;
 };
 
 inline void realizeNode(Node *node) {
@@ -235,15 +230,14 @@ inline void realizeEdge(Edge *edge) {
 
 struct Stage final : Node {
 	Stage(Engine *engine, const char *displayName)
-	: Node{NodeType::stage, engine, displayName} { }
+	: Node {NodeType::stage, engine, displayName} {}
 };
 
 template<size_t N>
 struct Requires {
 	template<typename... Args>
-	requires (std::is_convertible_v<Args, Node *> && ...)
-	Requires(Args &&... args)
-	: array{{args...}} { }
+	requires(std::is_convertible_v<Args, Node *> && ...)
+	Requires(Args &&...args) : array {{args...}} {}
 
 	Requires(const Requires &) = default;
 
@@ -256,9 +250,9 @@ Requires(Args &&...) -> Requires<sizeof...(Args)>;
 template<size_t N>
 struct Entails {
 	template<typename... Args>
-	Entails(Args &&... args)
-	requires (std::is_convertible_v<Args, Node *> && ...)
-	: array{{args...}} { }
+	Entails(Args &&...args)
+	requires(std::is_convertible_v<Args, Node *> && ...)
+	: array {{args...}} {}
 
 	frg::array<Node *, N> array;
 };
@@ -268,7 +262,7 @@ Entails(Args &&...) -> Entails<sizeof...(Args)>;
 
 struct IntoEdgesTo {
 	template<typename... Args>
-	frg::array<Edge, sizeof...(Args)> operator() (Args &&... args) const {
+	frg::array<Edge, sizeof...(Args)> operator()(Args &&...args) const {
 		return {{{args, target}...}};
 	}
 
@@ -277,7 +271,7 @@ struct IntoEdgesTo {
 
 struct IntoEdgesFrom {
 	template<typename... Args>
-	frg::array<Edge, sizeof...(Args)> operator() (Args &&... args) const {
+	frg::array<Edge, sizeof...(Args)> operator()(Args &&...args) const {
 		return {{{source, args}...}};
 	}
 
@@ -289,26 +283,25 @@ auto apply(std::index_sequence<S...>, frg::array<T, N> array, I invocable) {
 	return invocable(array[S]...);
 }
 
-template< typename F, size_t NR = 0, size_t NE = 0>
+template<typename F, size_t NR = 0, size_t NE = 0>
 struct Task final : Node {
 	Task(Engine *engine, const char *displayName, Requires<NR> r, Entails<NE> e, F invocable)
-	: Node{NodeType::task, engine, displayName}, invocable_{std::move(invocable)},
-			rEdges_{apply(std::make_index_sequence<NR>{}, r.array, IntoEdgesTo{this})},
-			eEdges_{apply(std::make_index_sequence<NE>{}, e.array, IntoEdgesFrom{this})} { }
+	: Node {NodeType::task, engine, displayName}
+	, invocable_ {std::move(invocable)}
+	, rEdges_ {apply(std::make_index_sequence<NR> {}, r.array, IntoEdgesTo {this})}
+	, eEdges_ {apply(std::make_index_sequence<NE> {}, e.array, IntoEdgesFrom {this})} {}
 
 	Task(Engine *engine, const char *displayName, F invocable)
-	: Task{engine, displayName, {}, {}, std::move(invocable)} { }
+	: Task {engine, displayName, {}, {}, std::move(invocable)} {}
 
 	Task(Engine *engine, const char *displayName, Requires<NR> r, F invocable)
-	: Task{engine, displayName, r, {}, std::move(invocable)} { }
+	: Task {engine, displayName, r, {}, std::move(invocable)} {}
 
 	Task(Engine *engine, const char *displayName, Entails<NE> e, F invocable)
-	: Task{engine, displayName, {}, e, std::move(invocable)} { }
+	: Task {engine, displayName, {}, e, std::move(invocable)} {}
 
 protected:
-	void activate() override {
-		invocable_();
-	}
+	void activate() override { invocable_(); }
 
 private:
 	F invocable_;
@@ -316,4 +309,4 @@ private:
 	frg::array<Edge, NE> eEdges_;
 };
 
-} // namespace initgraph
+}  // namespace initgraph

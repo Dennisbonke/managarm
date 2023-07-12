@@ -1,7 +1,7 @@
+#include "testsuite.hpp"
+
 #include <iostream>
 #include <vector>
-
-#include "testsuite.hpp"
 
 std::vector<abstract_test_case *> &test_case_ptrs() {
 	static std::vector<abstract_test_case *> singleton;

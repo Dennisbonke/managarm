@@ -1,15 +1,14 @@
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-#include <time.h>
-
 #include <async/cancellation.hpp>
 #include <async/result.hpp>
 #include <helix/ipc.hpp>
 #include <helix/memory.hpp>
 #include <smarter.hpp>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include <time.h>
 
 namespace protocols {
 namespace svrctl {
@@ -25,7 +24,7 @@ struct ControlOperations {
 	async::result<Error> (*bind)(int64_t base_id);
 };
 
-async::result<void>
-serveControl(const ControlOperations *ops);
+async::result<void> serveControl(const ControlOperations *ops);
 
-} } // namespace protocols::svrctl
+}  // namespace svrctl
+}  // namespace protocols

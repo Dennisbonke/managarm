@@ -1,9 +1,9 @@
 #pragma once
 
 #include <assert.h>
+#include <frg/manual_box.hpp>
 #include <frg/slab.hpp>
 #include <frg/spinlock.hpp>
-#include <frg/manual_box.hpp>
 #include <physical-buddy.hpp>
 #include <thor-internal/arch/stack.hpp>
 
@@ -21,6 +21,7 @@ private:
 
 struct KernelVirtualMemory {
 	using Mutex = frg::ticket_spinlock;
+
 public:
 	static KernelVirtualMemory &global();
 
@@ -28,8 +29,8 @@ public:
 	KernelVirtualMemory();
 
 	KernelVirtualMemory(const KernelVirtualMemory &other) = delete;
-	
-	KernelVirtualMemory &operator= (const KernelVirtualMemory &other) = delete;
+
+	KernelVirtualMemory &operator=(const KernelVirtualMemory &other) = delete;
 
 	void *allocate(size_t length);
 	void deallocate(void *pointer, size_t length);
@@ -51,10 +52,10 @@ public:
 		return true;
 #else
 		return false;
-#endif // KERNEL_LOG_ALLOCATIONS
+#endif  // KERNEL_LOG_ALLOCATIONS
 	}
 
-	template <typename F>
+	template<typename F>
 	void walk_stack(F functor) {
 		walkThisStack(functor);
 	}
@@ -70,23 +71,14 @@ using KernelAlloc = frg::slab_allocator<KernelVirtualAlloc, IrqSpinlock>;
 
 extern constinit frg::manual_box<KernelVirtualAlloc> kernelVirtualAlloc;
 
-extern constinit frg::manual_box<
-	frg::slab_pool<
-		KernelVirtualAlloc,
-		IrqSpinlock
-	>
-> kernelHeap;
+extern constinit frg::manual_box<frg::slab_pool<KernelVirtualAlloc, IrqSpinlock>> kernelHeap;
 
 extern constinit frg::manual_box<KernelAlloc> kernelAlloc;
 
 struct Allocator {
-	void *allocate(size_t size) {
-		return kernelAlloc->allocate(size);
-	}
+	void *allocate(size_t size) { return kernelAlloc->allocate(size); }
 
-	void deallocate(void *p, size_t size) {
-		kernelAlloc->deallocate(p, size);
-	}
+	void deallocate(void *p, size_t size) { kernelAlloc->deallocate(p, size); }
 };
 
-} // namespace thor
+}  // namespace thor

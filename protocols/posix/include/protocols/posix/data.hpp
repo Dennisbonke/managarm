@@ -16,4 +16,4 @@ struct ManagarmServerData {
 	HelHandle controlLane;
 };
 
-} // namespace posix
+}  // namespace posix

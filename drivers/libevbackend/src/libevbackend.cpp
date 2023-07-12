@@ -1,26 +1,25 @@
-#include <linux/input.h>
-#include <stdio.h>
-#include <string.h>
-#include <sys/epoll.h>
-#include <algorithm>
-#include <deque>
-#include <iostream>
-
-#include <async/result.hpp>
-#include <async/oneshot-event.hpp>
-#include <boost/intrusive/list.hpp>
-#include <helix/ipc.hpp>
-#include <libevbackend.hpp>
-#include <protocols/fs/server.hpp>
-#include <protocols/mbus/client.hpp>
-
-#include <frg/std_compat.hpp>
-#include <bragi/helpers-all.hpp>
-#include <bragi/helpers-std.hpp>
+#include "libevbackend.hpp"
 
 #include "fs.bragi.hpp"
 #include "hw.bragi.hpp"
-#include "libevbackend.hpp"
+
+#include <algorithm>
+#include <async/oneshot-event.hpp>
+#include <async/result.hpp>
+#include <boost/intrusive/list.hpp>
+#include <bragi/helpers-all.hpp>
+#include <bragi/helpers-std.hpp>
+#include <deque>
+#include <frg/std_compat.hpp>
+#include <helix/ipc.hpp>
+#include <iostream>
+#include <libevbackend.hpp>
+#include <linux/input.h>
+#include <protocols/fs/server.hpp>
+#include <protocols/mbus/client.hpp>
+#include <stdio.h>
+#include <string.h>
+#include <sys/epoll.h>
 
 namespace libevbackend {
 
@@ -36,15 +35,14 @@ helix::UniqueLane pmLane;
 async::detached issueReset() {
 	auto root = co_await mbus::Instance::global().getRoot();
 
-	auto filter = mbus::Conjunction({
-		mbus::EqualsFilter("class", "pm-interface")
-	});
+	auto filter = mbus::Conjunction({mbus::EqualsFilter("class", "pm-interface")});
 
-	auto handler = mbus::ObserverHandler{}
-	.withAttach([] (mbus::Entity entity, mbus::Properties properties) -> async::detached {
-		pmLane = helix::UniqueLane(co_await entity.bind());
-		pmFound.raise();
-	});
+	auto handler = mbus::ObserverHandler {}.withAttach(
+		[](mbus::Entity entity, mbus::Properties properties) -> async::detached {
+			pmLane = helix::UniqueLane(co_await entity.bind());
+			pmFound.raise();
+		}
+	);
 
 	co_await root.linkObserver(std::move(filter), std::move(handler));
 	co_await pmFound.wait();
@@ -52,13 +50,13 @@ async::detached issueReset() {
 	managarm::hw::PmResetRequest req;
 
 	auto [offer, send_req, recv_head] = co_await helix_ng::exchangeMsgs(
-			pmLane,
-			helix_ng::offer(
-				helix_ng::want_lane,
-				helix_ng::sendBragiHeadOnly(req, frg::stl_allocator{}),
-				helix_ng::recvInline()
-			)
-		);
+		pmLane,
+		helix_ng::offer(
+			helix_ng::want_lane,
+			helix_ng::sendBragiHeadOnly(req, frg::stl_allocator {}),
+			helix_ng::recvInline()
+		)
+	);
 
 	HEL_CHECK(offer.error());
 	HEL_CHECK(send_req.error());
@@ -69,9 +67,9 @@ async::detached issueReset() {
 
 	std::vector<std::byte> tailBuffer(preamble.tail_size());
 	auto [recv_tail] = co_await helix_ng::exchangeMsgs(
-			offer.descriptor(),
-			helix_ng::recvBuffer(tailBuffer.data(), tailBuffer.size())
-		);
+		offer.descriptor(),
+		helix_ng::recvBuffer(tailBuffer.data(), tailBuffer.size())
+	);
 
 	HEL_CHECK(recv_tail.error());
 
@@ -82,7 +80,7 @@ async::detached issueReset() {
 	throw std::runtime_error("Return from PM_RESET request");
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // ----------------------------------------------------------------------------
 // File implementation.
@@ -93,19 +91,23 @@ File::read(void *object, const char *, void *buffer, size_t max_size) {
 	auto self = static_cast<File *>(object);
 
 	// Make sure that we can at least write the SYN_DROPPED packet.
-	if(max_size < sizeof(input_event))
+	if(max_size < sizeof(input_event)) {
 		co_return protocols::fs::Error::illegalArguments;
+	}
 
-	if(self->_nonBlock && self->_pending.empty() && !self->_overflow)
+	if(self->_nonBlock && self->_pending.empty() && !self->_overflow) {
 		co_return protocols::fs::Error::wouldBlock;
+	}
 
-	while(self->_pending.empty() && !self->_overflow)
+	while(self->_pending.empty() && !self->_overflow) {
 		co_await self->_statusBell.async_wait();
+	}
 
 	if(self->_overflow) {
 		struct timespec now;
-		if(clock_gettime(self->_clockId, &now))
+		if(clock_gettime(self->_clockId, &now)) {
 			throw std::runtime_error("clock_gettime() failed");
+		}
 
 		input_event uev;
 		memset(&uev, 0, sizeof(input_event));
@@ -120,14 +122,14 @@ File::read(void *object, const char *, void *buffer, size_t max_size) {
 		self->_overflow = false;
 
 		co_return sizeof(input_event);
-	}else{
+	} else {
 		size_t written = 0;
-		while(!self->_pending.empty()
-				&& written + sizeof(input_event) <= max_size) {
+		while(!self->_pending.empty() && written + sizeof(input_event) <= max_size) {
 			auto evt = self->_pending.front();
 			self->_pending.pop_front();
-			if(self->_pending.empty())
+			if(self->_pending.empty()) {
 				self->_statusPage.update(self->_currentSeq, 0);
+			}
 
 			input_event uev;
 			memset(&uev, 0, sizeof(input_event));
@@ -136,7 +138,8 @@ File::read(void *object, const char *, void *buffer, size_t max_size) {
 			uev.type = evt.type;
 			uev.code = evt.code;
 			uev.value = evt.value;
-			memcpy(reinterpret_cast<char *>(buffer) + written, &uev, sizeof(input_event));
+			memcpy(reinterpret_cast<char *>(buffer) + written, &uev, sizeof(input_event)
+			);
 			written += sizeof(input_event);
 		}
 
@@ -145,43 +148,44 @@ File::read(void *object, const char *, void *buffer, size_t max_size) {
 	}
 }
 
-
 async::result<frg::expected<protocols::fs::Error, protocols::fs::PollWaitResult>>
-File::pollWait(void *object, uint64_t past_seq, int mask,
-		async::cancellation_token cancellation) {
+File::pollWait(void *object, uint64_t past_seq, int mask, async::cancellation_token cancellation) {
 	auto self = static_cast<File *>(object);
 
 	assert(past_seq <= self->_currentSeq);
-	while(self->_currentSeq == past_seq)
+	while(self->_currentSeq == past_seq) {
 		co_await self->_statusBell.async_wait();
+	}
 
-	co_return protocols::fs::PollWaitResult{
+	co_return protocols::fs::PollWaitResult {
 		self->_currentSeq,
-		self->_currentSeq > 0 ? EPOLLIN : 0
-	};
+		self->_currentSeq > 0 ? EPOLLIN : 0};
 }
 
 async::result<frg::expected<protocols::fs::Error, protocols::fs::PollStatusResult>>
 File::pollStatus(void *object) {
 	auto self = static_cast<File *>(object);
 
-	co_return protocols::fs::PollStatusResult{
+	co_return protocols::fs::PollStatusResult {
 		self->_currentSeq,
-		self->_pending.empty() ? 0 : EPOLLIN
-	};
+		self->_pending.empty() ? 0 : EPOLLIN};
 }
 
-async::result<void>
-File::ioctl(void *object, uint32_t id, helix_ng::RecvInlineResult msg,
-		helix::UniqueLane conversation) {
+async::result<void> File::ioctl(
+	void *object,
+	uint32_t id,
+	helix_ng::RecvInlineResult msg,
+	helix::UniqueLane conversation
+) {
 	if(id == managarm::fs::GenericIoctlRequest::message_id) {
 		auto req = bragi::parse_head_only<managarm::fs::GenericIoctlRequest>(msg);
 		assert(req);
 		auto self = static_cast<File *>(object);
 		if(req->command() == EVIOCGBIT(0, 0)) {
 			assert(req->size());
-			if(logRequests)
+			if(logRequests) {
 				std::cout << "EVIOCGBIT()" << std::endl;
+			}
 
 			managarm::fs::GenericIoctlReply resp;
 
@@ -196,24 +200,28 @@ File::ioctl(void *object, uint32_t id, helix_ng::RecvInlineResult msg,
 			);
 			HEL_CHECK(send_resp.error());
 			HEL_CHECK(send_data.error());
-		}else if(req->command() == EVIOCGBIT(1, 0)) {
+		} else if(req->command() == EVIOCGBIT(1, 0)) {
 			assert(req->size());
-			if(logRequests)
+			if(logRequests) {
 				std::cout << "EVIOCGBIT(" << req->input_type() << ")" << std::endl;
+			}
 
 			managarm::fs::GenericIoctlReply resp;
 
 			std::pair<const uint8_t *, size_t> p;
 			if(req->input_type() == EV_KEY) {
 				resp.set_error(managarm::fs::Errors::SUCCESS);
-				p = {self->_device->_keyBits.data(), self->_device->_keyBits.size()};
-			}else if(req->input_type() == EV_REL) {
+				p = {self->_device->_keyBits.data(),
+				     self->_device->_keyBits.size()};
+			} else if(req->input_type() == EV_REL) {
 				resp.set_error(managarm::fs::Errors::SUCCESS);
-				p = {self->_device->_relBits.data(), self->_device->_relBits.size()};
-			}else if(req->input_type() == EV_ABS) {
+				p = {self->_device->_relBits.data(),
+				     self->_device->_relBits.size()};
+			} else if(req->input_type() == EV_ABS) {
 				resp.set_error(managarm::fs::Errors::SUCCESS);
-				p = {self->_device->_absBits.data(), self->_device->_absBits.size()};
-			}else{
+				p = {self->_device->_absBits.data(),
+				     self->_device->_absBits.size()};
+			} else {
 				resp.set_error(managarm::fs::Errors::SUCCESS);
 				p = {nullptr, 0};
 			}
@@ -227,7 +235,7 @@ File::ioctl(void *object, uint32_t id, helix_ng::RecvInlineResult msg,
 			);
 			HEL_CHECK(send_resp.error());
 			HEL_CHECK(send_data.error());
-		}else if(req->command() == EVIOCSCLOCKID) {
+		} else if(req->command() == EVIOCSCLOCKID) {
 			managarm::fs::GenericIoctlReply resp;
 
 			// TODO: Does this setting affect already queued events in Linux?
@@ -247,13 +255,14 @@ File::ioctl(void *object, uint32_t id, helix_ng::RecvInlineResult msg,
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else if(req->command() == EVIOCGABS(0)) {
+		} else if(req->command() == EVIOCGABS(0)) {
 			managarm::fs::GenericIoctlReply resp;
-			if(logRequests)
+			if(logRequests) {
 				std::cout << "EVIOCGABS(" << req->input_type() << ")" << std::endl;
+			}
 
 			assert(static_cast<size_t>(req->input_type())
-					< self->_device->_absoluteSlots.size());
+			       < self->_device->_absoluteSlots.size());
 			auto slot = &self->_device->_absoluteSlots[req->input_type()];
 			resp.set_input_value(slot->value);
 			resp.set_input_min(slot->minimum);
@@ -268,38 +277,39 @@ File::ioctl(void *object, uint32_t id, helix_ng::RecvInlineResult msg,
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else{
-			std::cout << "Unknown ioctl() with ID " << std::to_string(req->command()) << std::endl;
-			auto [dismiss] = co_await helix_ng::exchangeMsgs(
-				conversation, helix_ng::dismiss());
+		} else {
+			std::cout << "Unknown ioctl() with ID " << std::to_string(req->command())
+				  << std::endl;
+			auto [dismiss] =
+				co_await helix_ng::exchangeMsgs(conversation, helix_ng::dismiss());
 			HEL_CHECK(dismiss.error());
 		}
-	}else{
+	} else {
 		std::cout << "Unknown ioctl() message with ID " << id << std::endl;
-		auto [dismiss] = co_await helix_ng::exchangeMsgs(
-			conversation, helix_ng::dismiss());
+		auto [dismiss] = co_await helix_ng::exchangeMsgs(conversation, helix_ng::dismiss());
 		HEL_CHECK(dismiss.error());
 	}
 }
 
-
-constexpr auto fileOperations = protocols::fs::FileOperations{
+constexpr auto fileOperations = protocols::fs::FileOperations {
 	.read = &File::read,
 	.ioctl = &File::ioctl,
 	.pollWait = &File::pollWait,
-	.pollStatus = &File::pollStatus
-};
+	.pollStatus = &File::pollStatus};
 
 helix::UniqueLane File::serve(smarter::shared_ptr<File> file) {
 	helix::UniqueLane local_lane, remote_lane;
 	std::tie(local_lane, remote_lane) = helix::createStream();
-	async::detach(protocols::fs::servePassthrough(
-			std::move(local_lane), file, &fileOperations));
+	async::detach(protocols::fs::servePassthrough(std::move(local_lane), file, &fileOperations)
+	);
 	return remote_lane;
 }
 
 File::File(EventDevice *device, bool non_block)
-: _device{device}, _currentSeq{1}, _nonBlock{non_block}, _clockId{CLOCK_MONOTONIC} {
+: _device {device}
+, _currentSeq {1}
+, _nonBlock {non_block}
+, _clockId {CLOCK_MONOTONIC} {
 	_statusPage.update(_currentSeq, 0);
 }
 
@@ -312,15 +322,13 @@ File::~File() {
 // EventDevice implementation.
 // ----------------------------------------------------------------------------
 
-async::detached serveDevice(std::shared_ptr<EventDevice> device,
-		helix::UniqueLane lane) {
+async::detached serveDevice(std::shared_ptr<EventDevice> device, helix::UniqueLane lane) {
 	std::cout << "unix device: Connection" << std::endl;
 
 	while(true) {
 		auto [accept, recv_req] = co_await helix_ng::exchangeMsgs(
 			lane,
-			helix_ng::accept(
-				helix_ng::recvInline())
+			helix_ng::accept(helix_ng::recvInline())
 		);
 		HEL_CHECK(accept.error());
 		HEL_CHECK(recv_req.error());
@@ -330,8 +338,10 @@ async::detached serveDevice(std::shared_ptr<EventDevice> device,
 		req.ParseFromArray(recv_req.data(), recv_req.length());
 		recv_req.reset();
 		if(req.req_type() == managarm::fs::CntReqType::DEV_OPEN) {
-			auto file = smarter::make_shared<File>(device.get(),
-					req.flags() & managarm::fs::OpenFlags::OF_NONBLOCK);
+			auto file = smarter::make_shared<File>(
+				device.get(),
+				req.flags() & managarm::fs::OpenFlags::OF_NONBLOCK
+			);
 			device->_files.push_back(*file.get());
 			auto remote_lane = File::serve(file);
 
@@ -349,7 +359,7 @@ async::detached serveDevice(std::shared_ptr<EventDevice> device,
 			HEL_CHECK(send_resp.error());
 			HEL_CHECK(push_pt.error());
 			HEL_CHECK(push_page.error());
-		}else{
+		} else {
 			throw std::runtime_error("Invalid serveDevice request!");
 		}
 	}
@@ -372,92 +382,101 @@ void EventDevice::setAbsoluteDetails(int code, int minimum, int maximum) {
 }
 
 void EventDevice::enableEvent(int type, int code) {
-	auto setBit = [] (uint8_t *array, size_t length, unsigned int bit) {
+	auto setBit = [](uint8_t *array, size_t length, unsigned int bit) {
 		assert(bit / 8 < length);
 		array[bit / 8] |= (1 << (bit % 8));
 	};
-	if(logConfiguration)
+	if(logConfiguration) {
 		std::cout << "drivers/libevbackend: Enabling event " << type << "." << code
-				<< std::endl;
+			  << std::endl;
+	}
 
 	if(type == EV_KEY) {
 		setBit(_keyBits.data(), _keyBits.size(), code);
-	}else if(type == EV_REL) {
+	} else if(type == EV_REL) {
 		setBit(_relBits.data(), _relBits.size(), code);
-	}else if(type == EV_ABS) {
+	} else if(type == EV_ABS) {
 		setBit(_absBits.data(), _absBits.size(), code);
-	}else{
+	} else {
 		throw std::runtime_error("Unexpected event type");
 	}
 	setBit(_typeBits.data(), _typeBits.size(), type);
 }
 
 void EventDevice::emitEvent(int type, int code, int value) {
-	auto getBit = [] (uint8_t *array, size_t length, unsigned int bit) -> bool {
+	auto getBit = [](uint8_t *array, size_t length, unsigned int bit) -> bool {
 		assert(bit / 8 < length);
 		return array[bit / 8] & (1 << (bit % 8));
 	};
-	auto putBit = [] (uint8_t *array, size_t length, unsigned int bit, bool value) {
+	auto putBit = [](uint8_t *array, size_t length, unsigned int bit, bool value) {
 		assert(bit / 8 < length);
 		array[bit / 8] &= ~(1 << (bit % 8));
-		array[bit / 8] |= (((int)value) << (bit % 8));
+		array[bit / 8] |= (((int) value) << (bit % 8));
 	};
 
 	// Filter out events that do not update the device state.
-	if(type == EV_KEY && getBit(_currentKeys.data(), _currentKeys.size(), code) == value)
+	if(type == EV_KEY && getBit(_currentKeys.data(), _currentKeys.size(), code) == value) {
 		return;
-	if(type == EV_REL && !value)
+	}
+	if(type == EV_REL && !value) {
 		return;
-	if(type == EV_ABS && value == _absoluteSlots[code].value)
+	}
+	if(type == EV_ABS && value == _absoluteSlots[code].value) {
 		return;
+	}
 
 	// Update the device state.
 	if(type == EV_KEY) {
 		putBit(_currentKeys.data(), _currentKeys.size(), code, value);
-	}else if(type == EV_ABS) {
+	} else if(type == EV_ABS) {
 		_absoluteSlots[code].value = value;
 	}
 
 	// Handle magic key sequences in the driver.  This ensure that all devices implement
 	// the same magic keys. It is also more reliable than implementing this in a second process.
 	static bool resetSent = false;
-	if(!resetSent
-			&& getBit(_currentKeys.data(), _currentKeys.size(), KEY_LEFTCTRL)
-			&& getBit(_currentKeys.data(), _currentKeys.size(), KEY_LEFTALT)
-			&& getBit(_currentKeys.data(), _currentKeys.size(), KEY_DELETE)) {
+	if(!resetSent && getBit(_currentKeys.data(), _currentKeys.size(), KEY_LEFTCTRL)
+	   && getBit(_currentKeys.data(), _currentKeys.size(), KEY_LEFTALT)
+	   && getBit(_currentKeys.data(), _currentKeys.size(), KEY_DELETE)) {
 		std::cout << "drivers/libevbackend: Issuing CTRL+ALT+DEL reset" << std::endl;
 		issueReset();
 		resetSent = true;
 	}
 
-	_staged.push_back(StagedEvent{type, code, value});
+	_staged.push_back(StagedEvent {type, code, value});
 }
 
 void EventDevice::notify() {
-	if(_staged.empty())
+	if(_staged.empty()) {
 		return;
+	}
 
 	for(auto &file : _files) {
-		if(file._overflow)
+		if(file._overflow) {
 			continue;
+		}
 
 		struct timespec now;
-		if(clock_gettime(file._clockId, &now))
+		if(clock_gettime(file._clockId, &now)) {
 			throw std::runtime_error("clock_gettime() failed");
+		}
 
 		if(file._pending.size() > 1024) {
 			file._overflow = true;
 			continue;
 		}
 
-		if(logCodes)
-			for(StagedEvent evt : _staged)
+		if(logCodes) {
+			for(StagedEvent evt : _staged) {
 				std::cout << "[" << now.tv_sec << "." << (now.tv_nsec / 1'000'000)
-						<< "] Event type: " << evt.type << ", code: " << evt.code
-						<< ", value: " << evt.value << std::endl;
+					  << "] Event type: " << evt.type << ", code: " << evt.code
+					  << ", value: " << evt.value << std::endl;
+			}
+		}
 
-		for(StagedEvent evt : _staged)
-			file._pending.push_back(PendingEvent{evt.type, evt.code, evt.value, now});
+		for(StagedEvent evt : _staged) {
+			file._pending.push_back(PendingEvent {evt.type, evt.code, evt.value, now});
+		}
 		file._currentSeq++;
 		file._statusPage.update(file._currentSeq, EPOLLIN);
 		file._statusBell.raise();
@@ -465,4 +484,4 @@ void EventDevice::notify() {
 	_staged.clear();
 }
 
-} // namespace libevbackend
+}  // namespace libevbackend

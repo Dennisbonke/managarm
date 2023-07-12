@@ -1,10 +1,9 @@
 #pragma once
 
-#include <stdint.h>
-
 #include <assert.h>
 #include <frg/hash_map.hpp>
 #include <smarter.hpp>
+#include <stdint.h>
 #include <thor-internal/kernel_heap.hpp>
 
 namespace thor {
@@ -18,11 +17,9 @@ struct CancelNode {
 
 	CancelNode(const CancelNode &) = delete;
 
-	CancelNode &operator= (const CancelNode &) = delete;
+	CancelNode &operator=(const CancelNode &) = delete;
 
-	uint64_t asyncId() {
-		return _asyncId;
-	}
+	uint64_t asyncId() { return _asyncId; }
 
 protected:
 	// This function is called to perform cancellation.
@@ -49,11 +46,9 @@ public:
 
 	CancelRegistry(const CancelRegistry &) = delete;
 
-	CancelRegistry &operator= (const CancelRegistry &) = delete;
+	CancelRegistry &operator=(const CancelRegistry &) = delete;
 
-	void setupSelfPtr(smarter::borrowed_ptr<CancelRegistry> ptr) {
-		_selfPtr = ptr;
-	}
+	void setupSelfPtr(smarter::borrowed_ptr<CancelRegistry> ptr) { _selfPtr = ptr; }
 
 	void registerNode(CancelNode *node);
 	void unregisterNode(CancelNode *node);
@@ -63,7 +58,7 @@ public:
 private:
 	// Number of _cancelMutex instances.
 	// Can be adjusted to tune the scalability of this mechanism.
-	static constexpr int lockGranularity = 4;
+	constexpr static int lockGranularity = 4;
 
 	smarter::borrowed_ptr<CancelRegistry> _selfPtr;
 
@@ -75,15 +70,9 @@ private:
 	// Protects the _nodeMap.
 	frg::ticket_spinlock _mapMutex;
 
-	frg::hash_map<
-		uint64_t,
-		CancelNode *,
-		frg::hash<uint64_t>,
-		KernelAlloc
-	> _nodeMap;
+	frg::hash_map<uint64_t, CancelNode *, frg::hash<uint64_t>, KernelAlloc> _nodeMap;
 
 	uint64_t _nextAsyncId;
-
 };
 
-} // namespace thor
+}  // namespace thor

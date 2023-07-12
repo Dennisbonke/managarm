@@ -1,17 +1,16 @@
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-#include <utility>
-
 #include <frg/tuple.hpp>
 #include <frg/vector.hpp>
+#include <initgraph.hpp>
+#include <stddef.h>
+#include <stdint.h>
 #include <thor-internal/arch/ints.hpp>
 #include <thor-internal/arch/paging.hpp>
-#include <thor-internal/types.hpp>
 #include <thor-internal/error.hpp>
 #include <thor-internal/kernel-stack.hpp>
-#include <initgraph.hpp>
+#include <thor-internal/types.hpp>
+#include <utility>
 
 namespace thor {
 
@@ -24,7 +23,7 @@ enum class Domain : uint64_t {
 };
 
 struct FpRegisters {
-	uint64_t v[64]; // V0-V31 are 128 bits
+	uint64_t v[64];  // V0-V31 are 128 bits
 	uint64_t fpcr;
 	uint64_t fpsr;
 };
@@ -41,6 +40,7 @@ struct Frame {
 
 	FpRegisters fp;
 };
+
 static_assert(sizeof(Frame) == 832, "Invalid exception frame size");
 
 struct Executor;
@@ -55,18 +55,29 @@ struct SyscallImageAccessor {
 	friend void saveExecutor(Executor *executor, SyscallImageAccessor accessor);
 
 	Word *number() { return &_frame()->x[0]; }
+
 	Word *in0() { return &_frame()->x[1]; }
+
 	Word *in1() { return &_frame()->x[2]; }
+
 	Word *in2() { return &_frame()->x[3]; }
+
 	Word *in3() { return &_frame()->x[4]; }
+
 	Word *in4() { return &_frame()->x[5]; }
+
 	Word *in5() { return &_frame()->x[6]; }
+
 	Word *in6() { return &_frame()->x[7]; }
+
 	Word *in7() { return &_frame()->x[8]; }
+
 	Word *in8() { return &_frame()->x[9]; }
 
 	Word *error() { return &_frame()->x[0]; }
+
 	Word *out0() { return &_frame()->x[1]; }
+
 	Word *out1() { return &_frame()->x[2]; }
 
 	void *frameBase() { return _pointer + sizeof(Frame); }
@@ -74,12 +85,9 @@ struct SyscallImageAccessor {
 private:
 	friend struct FaultImageAccessor;
 
-	SyscallImageAccessor(char *ptr)
-	: _pointer{ptr} { }
+	SyscallImageAccessor(char *ptr) : _pointer {ptr} {}
 
-	Frame *_frame() {
-		return reinterpret_cast<Frame *>(_pointer);
-	}
+	Frame *_frame() { return reinterpret_cast<Frame *>(_pointer); }
 
 	char *_pointer;
 };
@@ -88,30 +96,26 @@ struct FaultImageAccessor {
 	friend void saveExecutor(Executor *executor, FaultImageAccessor accessor);
 
 	Word *ip() { return &_frame()->elr; }
+
 	Word *sp() { return &_frame()->sp; }
 
 	// TODO: this should have a different name
 	Word *rflags() { return &_frame()->spsr; }
-	Word *code() { return &_frame()->esr ; }
+
+	Word *code() { return &_frame()->esr; }
 
 	Word *faultAddr() { return &_frame()->far; }
 
-	bool inKernelDomain() {
-		return (_frame()->spsr & 0b1111) != 0b0000;
-	}
+	bool inKernelDomain() { return (_frame()->spsr & 0b1111) != 0b0000; }
 
 	bool allowUserPages();
 
-	operator SyscallImageAccessor () {
-		return SyscallImageAccessor{_pointer};
-	}
+	operator SyscallImageAccessor() { return SyscallImageAccessor {_pointer}; }
 
 	void *frameBase() { return _pointer + sizeof(Frame); }
 
 private:
-	Frame *_frame() {
-		return reinterpret_cast<Frame *>(_pointer);
-	}
+	Frame *_frame() { return reinterpret_cast<Frame *>(_pointer); }
 
 	char *_pointer;
 };
@@ -126,17 +130,14 @@ struct IrqImageAccessor {
 	Word *rflags() { return &_frame()->spsr; }
 
 	bool inPreemptibleDomain() {
-		return _frame()->domain == Domain::fault
-			|| _frame()->domain == Domain::fiber
-			|| _frame()->domain == Domain::idle
-			|| _frame()->domain == Domain::user;
+		return _frame()->domain == Domain::fault || _frame()->domain == Domain::fiber
+		    || _frame()->domain == Domain::idle || _frame()->domain == Domain::user;
 		return true;
 	}
 
 	bool inThreadDomain() {
 		assert(inPreemptibleDomain());
-		return _frame()->domain == Domain::fault
-			|| _frame()->domain == Domain::user;
+		return _frame()->domain == Domain::fault || _frame()->domain == Domain::user;
 	}
 
 	bool inManipulableDomain() {
@@ -157,9 +158,7 @@ struct IrqImageAccessor {
 	void *frameBase() { return _pointer + sizeof(Frame); }
 
 private:
-	Frame *_frame() {
-		return reinterpret_cast<Frame *>(_pointer);
-	}
+	Frame *_frame() { return reinterpret_cast<Frame *>(_pointer); }
 
 	char *_pointer;
 };
@@ -180,7 +179,7 @@ struct UserContext {
 
 	UserContext(const UserContext &other) = delete;
 
-	UserContext &operator= (const UserContext &other) = delete;
+	UserContext &operator=(const UserContext &other) = delete;
 
 	// Migrates this UserContext to a different CPU.
 	void migrate(CpuData *cpu_data);
@@ -194,7 +193,7 @@ struct FiberContext {
 
 	FiberContext(const FiberContext &other) = delete;
 
-	FiberContext &operator= (const FiberContext &other) = delete;
+	FiberContext &operator=(const FiberContext &other) = delete;
 
 	// TODO: This should be private.
 	UniqueKernelStack stack;
@@ -225,29 +224,31 @@ struct Executor {
 
 	~Executor();
 
-	Executor &operator= (const Executor &other) = delete;
+	Executor &operator=(const Executor &other) = delete;
 
 	// FIXME: remove or refactor the rdi / rflags accessors
 	// as they are platform specific and need to be abstracted here
 	Word *rflags() { return &general()->spsr; }
 
 	Word *ip() { return &general()->elr; }
+
 	Word *sp() { return &general()->sp; }
+
 	Word *cs() { return nullptr; }
+
 	Word *ss() { return nullptr; }
 
 	Word *arg0() { return &general()->x[1]; }
+
 	Word *arg1() { return &general()->x[2]; }
+
 	Word *result0() { return &general()->x[0]; }
+
 	Word *result1() { return &general()->x[1]; }
 
-	Frame *general() {
-		return reinterpret_cast<Frame *>(_pointer);
-	}
+	Frame *general() { return reinterpret_cast<Frame *>(_pointer); }
 
-	void *getExceptionStack() {
-		return _exceptionStack;
-	}
+	void *getExceptionStack() { return _exceptionStack; }
 
 private:
 	char *_pointer;
@@ -279,8 +280,8 @@ smarter::borrowed_ptr<Thread> activeExecutor();
 
 // Note: These constants we mirrored in assembly.
 // Do not change their values!
-inline constexpr unsigned int uarRead = 1;
-inline constexpr unsigned int uarWrite = 2;
+constexpr inline unsigned int uarRead = 1;
+constexpr inline unsigned int uarWrite = 2;
 
 // Note: This struct is accessed from assembly.
 // Do not change the field offsets!
@@ -301,7 +302,7 @@ struct AssemblyCpuData {
 	UserAccessRegion *currentUar;
 };
 
-static inline constexpr size_t maxAsid = 256;
+constexpr inline static size_t maxAsid = 256;
 
 struct GicCpuInterface;
 
@@ -329,7 +330,7 @@ struct PlatformCpuData : public AssemblyCpuData {
 
 inline PlatformCpuData *getPlatformCpuData() {
 	AssemblyCpuData *cpu_data = nullptr;
-	asm volatile ("mrs %0, tpidr_el1" : "=r"(cpu_data));
+	asm volatile("mrs %0, tpidr_el1" : "=r"(cpu_data));
 	return static_cast<PlatformCpuData *>(cpu_data);
 }
 
@@ -345,22 +346,32 @@ template<typename F, typename... Args>
 void runOnStack(F functor, StackBase stack, Args... args) {
 	struct Context {
 		Context(F functor, Args... args)
-		: functor(std::move(functor)), args(std::move(args)...) { }
+		: functor(std::move(functor))
+		, args(std::move(args)...) {}
 
 		F functor;
 		frg::tuple<Args...> args;
 	};
 
 	Context original(std::move(functor), std::forward<Args>(args)...);
-	doRunOnStack([] (void *context, void *previousSp) {
-		Context stolen = std::move(*static_cast<Context *>(context));
-		frg::apply(std::move(stolen.functor),
-				frg::tuple_cat(frg::make_tuple(Continuation{previousSp}), std::move(stolen.args)));
-	}, stack.sp, &original);
+	doRunOnStack(
+		[](void *context, void *previousSp) {
+			Context stolen = std::move(*static_cast<Context *>(context));
+			frg::apply(
+				std::move(stolen.functor),
+				frg::tuple_cat(
+					frg::make_tuple(Continuation {previousSp}),
+					std::move(stolen.args)
+				)
+			);
+		},
+		stack.sp,
+		&original
+	);
 }
 
 // Calls the given function on the given stack.
-void doRunOnStack(void (*function) (void *, void *), void *sp, void *argument);
+void doRunOnStack(void (*function)(void *, void *), void *sp, void *argument);
 
 void initializeThisProcessor();
 
@@ -370,14 +381,14 @@ extern "C" void saveFpSimdRegisters(FpRegisters *frame);
 
 template<typename F>
 void forkExecutor(F functor, Executor *executor) {
-	auto delegate = [] (void *p) {
+	auto delegate = [](void *p) {
 		auto fp = static_cast<F *>(p);
 		(*fp)();
 	};
 
 	saveFpSimdRegisters(&executor->general()->fp);
 
-	//assert(executor->general()->domain == getCpuData()->currentDomain);
+	// assert(executor->general()->domain == getCpuData()->currentDomain);
 	doForkExecutor(executor, delegate, &functor);
 }
 
@@ -395,4 +406,4 @@ initgraph::Stage *getBootProcessorReadyStage();
 
 bool preemptionIsArmed();
 
-} // namespace thor
+}  // namespace thor

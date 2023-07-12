@@ -1,16 +1,15 @@
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-#include <string.h>
-#include <unordered_map>
-
-#include <async/result.hpp>
 #include <async/cancellation.hpp>
+#include <async/result.hpp>
 #include <boost/variant.hpp>
 #include <frg/expected.hpp>
 #include <helix/ipc.hpp>
 #include <protocols/fs/common.hpp>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include <unordered_map>
 
 // EVENTUALLY: use std::variant instead of boost::variant!
 
@@ -22,9 +21,7 @@ namespace _detail {
 struct File {
 	File(helix::UniqueDescriptor lane);
 
-	helix::BorrowedDescriptor getLane() {
-		return _lane;
-	}
+	helix::BorrowedDescriptor getLane() { return _lane; }
 
 	async::result<void> seekAbsolute(int64_t offset);
 
@@ -34,8 +31,7 @@ struct File {
 	async::result<frg::expected<Error, PollWaitResult>>
 	pollWait(uint64_t sequence, int mask, async::cancellation_token cancellation = {});
 
-	async::result<frg::expected<Error, PollStatusResult>>
-	pollStatus();
+	async::result<frg::expected<Error, PollStatusResult>> pollStatus();
 
 	async::result<helix::UniqueDescriptor> accessMemory();
 
@@ -43,8 +39,9 @@ private:
 	helix::UniqueDescriptor _lane;
 };
 
-} // namespace _detail
+}  // namespace _detail
 
 using _detail::File;
 
-} } // namespace protocols::fs
+}  // namespace fs
+}  // namespace protocols

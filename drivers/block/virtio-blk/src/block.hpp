@@ -1,10 +1,9 @@
 
-#include <memory>
-#include <queue>
-
+#include <async/oneshot-event.hpp>
 #include <blockfs.hpp>
 #include <core/virtio/core.hpp>
-#include <async/oneshot-event.hpp>
+#include <memory>
+#include <queue>
 
 namespace block {
 namespace virtio {
@@ -18,6 +17,7 @@ struct VirtRequest {
 	uint32_t reserved;
 	uint64_t sector;
 };
+
 static_assert(sizeof(VirtRequest) == 16, "Bad sizeof(VirtRequest)");
 
 enum {
@@ -26,10 +26,10 @@ enum {
 };
 
 namespace spec::regs {
-	inline constexpr arch::scalar_register<uint32_t> capacity[] = {
-			arch::scalar_register<uint32_t>{0},
-			arch::scalar_register<uint32_t>{4}};
-}
+constexpr inline arch::scalar_register<uint32_t> capacity[] = {
+	arch::scalar_register<uint32_t> {0},
+	arch::scalar_register<uint32_t> {4}};
+}  // namespace spec::regs
 
 struct Device;
 
@@ -57,11 +57,10 @@ struct Device : blockfs::BlockDevice {
 
 	void runDevice();
 
-	async::result<void> readSectors(uint64_t sector,
-			void *buffer, size_t num_sectors) override;
+	async::result<void> readSectors(uint64_t sector, void *buffer, size_t num_sectors) override;
 
-	async::result<void> writeSectors(uint64_t sector,
-			const void *buffer, size_t num_sectors) override;
+	async::result<void>
+	writeSectors(uint64_t sector, const void *buffer, size_t num_sectors) override;
 
 	async::result<size_t> getSize() override;
 
@@ -87,5 +86,5 @@ private:
 	size_t _size;
 };
 
-} } // namespace block::virtio
-
+}  // namespace virtio
+}  // namespace block

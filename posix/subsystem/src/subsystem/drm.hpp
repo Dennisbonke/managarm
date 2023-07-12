@@ -6,4 +6,4 @@ namespace drm_subsystem {
 
 async::detached run();
 
-} // namespace drm_subsystem
+}  // namespace drm_subsystem

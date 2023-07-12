@@ -8,4 +8,4 @@ struct UartLogHandler : public LogHandler {
 	void printChar(char c) override;
 };
 
-} // namespace thor
+}  // namespace thor

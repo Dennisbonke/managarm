@@ -10,12 +10,12 @@ struct AwaitEventNode {
 	friend struct OneshotEvent;
 	friend struct BitsetEvent;
 
-	void setup(Worklet *awaited) {
-		_awaited = awaited;
-	}
+	void setup(Worklet *awaited) { _awaited = awaited; }
 
 	Error error() { return _error; }
+
 	uint64_t sequence() { return _sequence; }
+
 	uint32_t bitset() { return _bitset; }
 
 private:
@@ -46,9 +46,8 @@ private:
 		frg::locate_member<
 			AwaitEventNode,
 			frg::default_list_hook<AwaitEventNode>,
-			&AwaitEventNode::_queueNode
-		>
-	> _waitQueue;
+			&AwaitEventNode::_queueNode>>
+		_waitQueue;
 };
 
 struct BitsetEvent {
@@ -70,9 +69,8 @@ private:
 		frg::locate_member<
 			AwaitEventNode,
 			frg::default_list_hook<AwaitEventNode>,
-			&AwaitEventNode::_queueNode
-		>
-	> _waitQueue;
+			&AwaitEventNode::_queueNode>>
+		_waitQueue;
 };
 
-} // namespace thor
+}  // namespace thor

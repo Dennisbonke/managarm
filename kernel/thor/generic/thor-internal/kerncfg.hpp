@@ -4,4 +4,4 @@ namespace thor {
 
 void initializeKerncfg();
 
-} // namespace thor
+}  // namespace thor

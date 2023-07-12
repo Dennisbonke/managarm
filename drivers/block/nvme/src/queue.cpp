@@ -1,12 +1,18 @@
+#include "queue.hpp"
+
+#include "spec.hpp"
+
 #include <arch/bit.hpp>
 #include <helix/ipc.hpp>
 #include <helix/memory.hpp>
 
-#include "queue.hpp"
-#include "spec.hpp"
-
 Queue::Queue(unsigned int qid, unsigned int depth, arch::mem_space doorbells)
-	: qid_(qid), depth_(depth), doorbells_(doorbells), sqTail_(0), cqHead_(0), cqPhase_(1) {
+: qid_(qid)
+, depth_(depth)
+, doorbells_(doorbells)
+, sqTail_(0)
+, cqHead_(0)
+, cqPhase_(1) {
 	queuedCmds_.resize(depth);
 }
 
@@ -18,16 +24,30 @@ void Queue::init() {
 	HelHandle memory;
 	void *window;
 	HEL_CHECK(helAllocateMemory(cqSize, kHelAllocContinuous, nullptr, &memory));
-	HEL_CHECK(helMapMemory(memory, kHelNullHandle, nullptr,
-						   0, cqSize, kHelMapProtRead | kHelMapProtWrite, &window));
+	HEL_CHECK(helMapMemory(
+		memory,
+		kHelNullHandle,
+		nullptr,
+		0,
+		cqSize,
+		kHelMapProtRead | kHelMapProtWrite,
+		&window
+	));
 	HEL_CHECK(helCloseDescriptor(kHelThisUniverse, memory));
 
 	cqes_ = reinterpret_cast<spec::CompletionEntry *>(window);
 	memset(cqes_, 0, cqSize);
 
 	HEL_CHECK(helAllocateMemory(sqSize, kHelAllocContinuous, nullptr, &memory));
-	HEL_CHECK(helMapMemory(memory, kHelNullHandle, nullptr,
-						   0, sqSize, kHelMapProtRead | kHelMapProtWrite, &window));
+	HEL_CHECK(helMapMemory(
+		memory,
+		kHelNullHandle,
+		nullptr,
+		0,
+		sqSize,
+		kHelMapProtRead | kHelMapProtWrite,
+		&window
+	));
 	HEL_CHECK(helCloseDescriptor(kHelThisUniverse, memory));
 
 	sqCmds_ = window;
@@ -49,7 +69,7 @@ int Queue::handleIrq() {
 	int found = 0;
 	spec::CompletionEntry *cqe = &cqes_[cqHead_];
 
-	while ((convert_endian<endian::little>(cqe->status) & 1) == cqPhase_) {
+	while((convert_endian<endian::little>(cqe->status) & 1) == cqPhase_) {
 		found++;
 
 		auto status = convert_endian<endian::little>(cqe->status) >> 1;
@@ -60,7 +80,7 @@ int Queue::handleIrq() {
 		std::unique_ptr<Command> cmd = std::move(queuedCmds_[slot]);
 		cmd->complete(status, cqe->result);
 
-		if (++cqHead_ == depth_) {
+		if(++cqHead_ == depth_) {
 			cqHead_ = 0;
 			cqPhase_ ^= 1;
 		}
@@ -68,23 +88,26 @@ int Queue::handleIrq() {
 		cqe = &cqes_[cqHead_];
 	}
 
-	if (commandsInFlight_ == depth_ && found > 0)
+	if(commandsInFlight_ == depth_ && found > 0) {
 		freeSlotDoorbell_.raise();
+	}
 
 	commandsInFlight_ -= found;
 
-	if (found)
-		doorbells_.store(arch::scalar_register<uint32_t>{0x4}, cqHead_);
+	if(found) {
+		doorbells_.store(arch::scalar_register<uint32_t> {0x4}, cqHead_);
+	}
 
 	return found;
 }
 
 async::result<size_t> Queue::findFreeSlot() {
-	if (commandsInFlight_ >= depth_)
+	if(commandsInFlight_ >= depth_) {
 		co_await freeSlotDoorbell_.async_wait();
+	}
 
-	for (size_t i = 0; i < queuedCmds_.size(); i++) {
-		if (!queuedCmds_[i]) {
+	for(size_t i = 0; i < queuedCmds_.size(); i++) {
+		if(!queuedCmds_[i]) {
 			co_return i;
 		}
 	}
@@ -94,7 +117,7 @@ async::result<size_t> Queue::findFreeSlot() {
 }
 
 async::detached Queue::submitPendingLoop() {
-	while (true) {
+	while(true) {
 		auto cmd = co_await pendingCmdQueue_.async_get();
 		assert(cmd);
 		co_await submitCommandToDevice(std::move(cmd.value()));
@@ -105,12 +128,13 @@ async::result<void> Queue::submitCommandToDevice(std::unique_ptr<Command> cmd) {
 	auto slot = co_await findFreeSlot();
 
 	auto &cmdBuf = cmd->getCommandBuffer();
-	cmdBuf.common.commandId = (uint16_t)slot;
+	cmdBuf.common.commandId = (uint16_t) slot;
 
-	memcpy((uint8_t *)sqCmds_ + (sqTail_ << 6), &cmdBuf, sizeof(spec::Command));
-	if (++sqTail_ == depth_)
+	memcpy((uint8_t *) sqCmds_ + (sqTail_ << 6), &cmdBuf, sizeof(spec::Command));
+	if(++sqTail_ == depth_) {
 		sqTail_ = 0;
-	doorbells_.store(arch::scalar_register<uint32_t>{0}, sqTail_);
+	}
+	doorbells_.store(arch::scalar_register<uint32_t> {0}, sqTail_);
 
 	queuedCmds_[slot] = std::move(cmd);
 	commandsInFlight_++;

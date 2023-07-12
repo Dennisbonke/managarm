@@ -1,28 +1,25 @@
 #pragma once
 
-#include <string>
-
 #include <async/result.hpp>
 #include <helix/ipc.hpp>
 #include <ostrace.bragi.hpp>
+#include <string>
 
 namespace protocols::ostrace {
 
-enum class EventId : uint64_t { };
-enum class ItemId : uint64_t { };
+enum class EventId : uint64_t {
+};
+enum class ItemId : uint64_t {
+};
 
 struct Context {
 	Context();
 	Context(helix::UniqueLane lane, bool enabled);
 
-	inline helix::BorrowedLane getLane() {
-		return lane_;
-	}
+	inline helix::BorrowedLane getLane() { return lane_; }
 
 	// Whether ostrace is currently active or not.
-	inline bool isActive() {
-		return enabled_;
-	}
+	inline bool isActive() { return enabled_; }
 
 	async::result<EventId> announceEvent(std::string_view name);
 	async::result<ItemId> announceItem(std::string_view name);
@@ -41,10 +38,10 @@ struct Event {
 
 private:
 	Context *ctx_;
-	bool live_; // Whether we emit an event at all.
+	bool live_;  // Whether we emit an event at all.
 	managarm::ostrace::EmitEventReq req_;
 };
 
 async::result<Context> createContext();
 
-} // namespace protocols::ostrace
+}  // namespace protocols::ostrace

@@ -4,9 +4,9 @@
 
 namespace thor {
 
-template <typename F>
+template<typename F>
 inline void walkThisStack(F) {
 	// TODO
 }
 
-} // namespace thor
+}  // namespace thor

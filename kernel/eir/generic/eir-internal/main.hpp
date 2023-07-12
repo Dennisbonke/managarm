@@ -6,4 +6,4 @@ namespace eir {
 
 extern initgraph::Engine globalInitEngine;
 
-} // namespace eir
+}  // namespace eir

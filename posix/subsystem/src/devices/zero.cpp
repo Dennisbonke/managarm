@@ -1,10 +1,10 @@
-#include <string.h>
+#include "zero.hpp"
 
 #include "../common.hpp"
-#include "zero.hpp"
 
 #include <bitset>
 #include <coroutine>
+#include <string.h>
 
 namespace {
 
@@ -16,17 +16,14 @@ private:
 		co_return length;
 	}
 
-	async::result<frg::expected<Error, size_t>> writeAll(Process *, const void *, size_t length) override {
+	async::result<frg::expected<Error, size_t>>
+	writeAll(Process *, const void *, size_t length) override {
 		co_return length;
 	}
 
-	async::result<frg::expected<Error, off_t>> seek(off_t, VfsSeek) override {
-		co_return 0;
-	}
+	async::result<frg::expected<Error, off_t>> seek(off_t, VfsSeek) override { co_return 0; }
 
-	helix::BorrowedDescriptor getPassthroughLane() override {
-		return _passthrough;
-	}
+	helix::BorrowedDescriptor getPassthroughLane() override { return _passthrough; }
 
 	helix::UniqueLane _passthrough;
 	async::cancellation_event _cancelServe;
@@ -35,29 +32,30 @@ public:
 	static void serve(smarter::shared_ptr<ZeroFile> file) {
 		helix::UniqueLane lane;
 		std::tie(lane, file->_passthrough) = helix::createStream();
-		async::detach(protocols::fs::servePassthrough(std::move(lane),
-				file, &fileOperations, file->_cancelServe));
+		async::detach(protocols::fs::servePassthrough(
+			std::move(lane),
+			file,
+			&fileOperations,
+			file->_cancelServe
+		));
 	}
 
 	ZeroFile(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link)
-	: File{StructName::get("zero-file"), std::move(mount), std::move(link)} { }
+	: File {StructName::get("zero-file"), std::move(mount), std::move(link)} {}
 };
 
 struct ZeroDevice final : UnixDevice {
-	ZeroDevice()
-	: UnixDevice(VfsType::charDevice) {
-		assignId({1, 5});
-	}
+	ZeroDevice() : UnixDevice(VfsType::charDevice) { assignId({1, 5}); }
 
-	std::string nodePath() override {
-		return "zero";
-	}
+	std::string nodePath() override { return "zero"; }
 
 	async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-	open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			SemanticFlags semantic_flags) override {
-		if(semantic_flags & ~(semanticRead | semanticWrite)){
-			std::cout << "\e[31mposix: open() received illegal arguments:"
+	open(std::shared_ptr<MountView> mount,
+	     std::shared_ptr<FsLink> link,
+	     SemanticFlags semantic_flags) override {
+		if(semantic_flags & ~(semanticRead | semanticWrite)) {
+			std::cout
+				<< "\e[31mposix: open() received illegal arguments:"
 				<< std::bitset<32>(semantic_flags)
 				<< "\nOnly semanticRead (0x2) and semanticWrite(0x4) are allowed.\e[39m"
 				<< std::endl;
@@ -71,7 +69,7 @@ struct ZeroDevice final : UnixDevice {
 	}
 };
 
-} // anonymous namespace
+}  // anonymous namespace
 
 std::shared_ptr<UnixDevice> createZeroDevice() {
 	return std::make_shared<ZeroDevice>();

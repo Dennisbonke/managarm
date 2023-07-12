@@ -1,25 +1,19 @@
 #pragma once
 
-#include <string>
-#include <unordered_map>
-
 #include "device.hpp"
 #include "sysfs.hpp"
+
+#include <string>
+#include <unordered_map>
 
 namespace drvcore {
 
 struct UeventProperties {
-	auto begin() {
-		return map.begin();
-	}
+	auto begin() { return map.begin(); }
 
-	auto end() {
-		return map.end();
-	}
+	auto end() { return map.end(); }
 
-	void set(std::string name, std::string value) {
-		map[name] = value;
-	}
+	void set(std::string name, std::string value) { map[name] = value; }
 
 private:
 	std::unordered_map<std::string, std::string> map;
@@ -34,21 +28,13 @@ protected:
 	~Device() = default;
 
 public:
-	void setupDevicePtr(std::weak_ptr<Device> self) {
-		_devicePtr = std::move(self);
-	}
+	void setupDevicePtr(std::weak_ptr<Device> self) { _devicePtr = std::move(self); }
 
-	std::shared_ptr<Device> devicePtr() {
-		return std::shared_ptr<Device>(_devicePtr);
-	}
+	std::shared_ptr<Device> devicePtr() { return std::shared_ptr<Device>(_devicePtr); }
 
-	std::shared_ptr<Device> parentDevice() {
-		return _parentDevice;
-	}
+	std::shared_ptr<Device> parentDevice() { return _parentDevice; }
 
-	UnixDevice *unixDevice() {
-		return _unixDevice;
-	}
+	UnixDevice *unixDevice() { return _unixDevice; }
 
 	// Returns the path of this device under /sys/devices.
 	std::string getSysfsPath();
@@ -69,7 +55,9 @@ struct BusSubsystem {
 	BusSubsystem(std::string name);
 
 	std::shared_ptr<sysfs::Object> object() { return _object; }
+
 	std::shared_ptr<sysfs::Object> devicesObject() { return _devicesObject; }
+
 	std::shared_ptr<sysfs::Object> driversObject() { return _driversObject; }
 
 private:
@@ -79,8 +67,7 @@ private:
 };
 
 struct BusDevice : Device {
-	BusDevice(BusSubsystem *subsystem, std::string name,
-			UnixDevice *unix_device);
+	BusDevice(BusSubsystem *subsystem, std::string name, UnixDevice *unix_device);
 
 protected:
 	~BusDevice() = default;
@@ -95,17 +82,19 @@ private:
 struct ClassSubsystem {
 	ClassSubsystem(std::string name);
 
-	std::shared_ptr<sysfs::Object> object() {
-		return _object;
-	}
+	std::shared_ptr<sysfs::Object> object() { return _object; }
 
 private:
 	std::shared_ptr<sysfs::Object> _object;
 };
 
 struct ClassDevice : Device {
-	ClassDevice(ClassSubsystem *subsystem, std::shared_ptr<Device> parent,
-			std::string name, UnixDevice *unix_device);
+	ClassDevice(
+		ClassSubsystem *subsystem,
+		std::shared_ptr<Device> parent,
+		std::string name,
+		UnixDevice *unix_device
+	);
 
 protected:
 	~ClassDevice() = default;
@@ -118,8 +107,12 @@ private:
 };
 
 struct BlockDevice : Device {
-	BlockDevice(ClassSubsystem *subsystem, std::shared_ptr<Device> parent,
-			std::string name, UnixDevice *unix_device);
+	BlockDevice(
+		ClassSubsystem *subsystem,
+		std::shared_ptr<Device> parent,
+		std::string name,
+		UnixDevice *unix_device
+	);
 
 protected:
 	~BlockDevice() = default;
@@ -139,4 +132,4 @@ uint32_t makeHotplugSeqnum();
 
 void emitHotplug(std::string buffer);
 
-} // namespace drvcore
+}  // namespace drvcore

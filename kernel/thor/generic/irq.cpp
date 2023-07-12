@@ -7,8 +7,8 @@
 namespace thor {
 
 namespace {
-	constexpr bool logService = false;
-}
+constexpr bool logService = false;
+}  // namespace
 
 // --------------------------------------------------------
 // IrqSlot
@@ -29,7 +29,9 @@ void IrqSlot::link(IrqPin *pin) {
 // --------------------------------------------------------
 
 IrqSink::IrqSink(frg::string<KernelAlloc> name)
-: _name{std::move(name)}, _pin{nullptr}, _currentSequence{0} { }
+: _name {std::move(name)}
+, _pin {nullptr}
+, _currentSequence {0} {}
 
 void IrqSink::dumpHardwareState() {
 	infoLogger() << "thor: No dump available for IRQ sink " << name() << frg::endlog;
@@ -63,11 +65,13 @@ Error IrqPin::ackSink(IrqSink *sink, uint64_t sequence) {
 	auto irq_lock = frg::guard(&irqMutex());
 	auto lock = frg::guard(&pin->_mutex);
 
-	if(sequence != sink->currentSequence())
+	if(sequence != sink->currentSequence()) {
 		return Error::illegalArgs;
+	}
 
-	if(sink->_status != IrqStatus::indefinite)
+	if(sink->_status != IrqStatus::indefinite) {
 		return Error::illegalArgs;
+	}
 	sink->_status = IrqStatus::acked;
 	pin->_acknowledge();
 	return Error::success;
@@ -80,11 +84,13 @@ Error IrqPin::nackSink(IrqSink *sink, uint64_t sequence) {
 	auto irq_lock = frg::guard(&irqMutex());
 	auto lock = frg::guard(&pin->_mutex);
 
-	if(sequence != sink->currentSequence())
+	if(sequence != sink->currentSequence()) {
 		return Error::illegalArgs;
+	}
 
-	if(sink->_status != IrqStatus::indefinite)
+	if(sink->_status != IrqStatus::indefinite) {
 		return Error::illegalArgs;
+	}
 	sink->_status = IrqStatus::nacked;
 	pin->_nack();
 	return Error::success;
@@ -108,8 +114,9 @@ Error IrqPin::kickSink(IrqSink *sink, bool wantClear) {
 		return Error::success;
 	}
 
-	if(sink->_status != IrqStatus::indefinite)
+	if(sink->_status != IrqStatus::indefinite) {
 		return Error::success;
+	}
 	sink->_status = IrqStatus::acked;
 	pin->_kick(true);
 	return Error::success;
@@ -120,12 +127,14 @@ Error IrqPin::kickSink(IrqSink *sink, bool wantClear) {
 // --------------------------------------------------------
 
 IrqPin::IrqPin(frg::string<KernelAlloc> name)
-: _name{std::move(name)}, _strategy{IrqStrategy::null},
-		_inService{false}, _dueSinks{0},
-		_maskState{0} {
-	[] (IrqPin *self, enable_detached_coroutine = {}) -> void {
+: _name {std::move(name)}
+, _strategy {IrqStrategy::null}
+, _inService {false}
+, _dueSinks {0}
+, _maskState {0} {
+	[](IrqPin *self, enable_detached_coroutine = {}) -> void {
 		while(true) {
-			co_await self->_unstallEvent.async_wait_if([&] () -> bool {
+			co_await self->_unstallEvent.async_wait_if([&]() -> bool {
 				auto irqLock = frg::guard(&irqMutex());
 				auto lock = frg::guard(&self->_mutex);
 
@@ -141,23 +150,30 @@ IrqPin::IrqPin(frg::string<KernelAlloc> name)
 				auto irqLock = frg::guard(&irqMutex());
 				auto lock = frg::guard(&self->_mutex);
 
-				if(!(self->_maskState & maskedForNack))
+				if(!(self->_maskState & maskedForNack)) {
 					continue;
+				}
 			}
 
 			auto ms = static_cast<uint64_t>(50) * (1 << self->_unstallExponent);
-			co_await generalTimerEngine()->sleepFor(static_cast<uint64_t>(50'000'000)
-					* (1 << self->_unstallExponent));
+			co_await generalTimerEngine()->sleepFor(
+				static_cast<uint64_t>(50'000'000) * (1 << self->_unstallExponent)
+			);
 
 			// Kick the IRQ.
 			{
 				auto irqLock = frg::guard(&irqMutex());
 				auto lock = frg::guard(&self->_mutex);
 
-				if(!(self->_maskState & maskedForNack))
+				if(!(self->_maskState & maskedForNack)) {
 					continue;
-				infoLogger() << "\e[35m" "thor: Unstalling IRQ " << self->name()
-						<< " after " << ms << " ms" "\e[39m" << frg::endlog;
+				}
+				infoLogger() << "\e[35m"
+						"thor: Unstalling IRQ "
+					     << self->name() << " after " << ms
+					     << " ms"
+						"\e[39m"
+					     << frg::endlog;
 				self->_kick(false);
 			}
 		}
@@ -172,15 +188,15 @@ void IrqPin::configure(IrqConfiguration desired) {
 
 	if(!_activeCfg.specified()) {
 		infoLogger() << "thor: Configuring IRQ " << _name
-				<< " to trigger mode: " << static_cast<int>(desired.trigger)
-				<< ", polarity: " << static_cast<int>(desired.polarity) << frg::endlog;
+			     << " to trigger mode: " << static_cast<int>(desired.trigger)
+			     << ", polarity: " << static_cast<int>(desired.polarity) << frg::endlog;
 		_strategy = program(desired.trigger, desired.polarity);
 
 		_activeCfg = desired;
 		_inService = false;
 		_dueSinks = 0;
 		_maskState = 0;
-	}else{
+	} else {
 		assert(_activeCfg.compatible(desired));
 	}
 }
@@ -192,31 +208,32 @@ void IrqPin::raise() {
 	if(_strategy == IrqStrategy::null) {
 		infoLogger() << "\e[35mthor: Unconfigured IRQ was raised\e[39m" << frg::endlog;
 		dumpHardwareState();
-	}else{
-		assert(_strategy == IrqStrategy::justEoi
-				|| _strategy == IrqStrategy::maskThenEoi);
+	} else {
+		assert(_strategy == IrqStrategy::justEoi || _strategy == IrqStrategy::maskThenEoi);
 	}
 
 	// If the IRQ is already masked, we're encountering a hardware race.
 	if(_maskState) {
 		++_maskedRaiseCtr;
 		// At least on x86, the IRQ controller may buffer up to one edge-triggered IRQ.
-		// If an IRQ is already buffered while we mask it, it will inevitably be raised again.
-		// Thus, we do not immediately complain about edge-triggered IRQs here.
+		// If an IRQ is already buffered while we mask it, it will inevitably be raised
+		// again. Thus, we do not immediately complain about edge-triggered IRQs here.
 		auto complain = _strategy != IrqStrategy::justEoi || _maskedRaiseCtr > 1;
 
 		if(complain) {
-			infoLogger() << "\e[35mthor: IRQ controller raised "
-					<< _name << " despite being masked (" << _maskedRaiseCtr
-					<< "x)" "\e[39m" << frg::endlog;
+			infoLogger() << "\e[35mthor: IRQ controller raised " << _name
+				     << " despite being masked (" << _maskedRaiseCtr
+				     << "x)"
+					"\e[39m"
+				     << frg::endlog;
 			dumpHardwareState();
 
 			for(auto it = _sinkList.begin(); it != _sinkList.end(); ++it) {
 				auto lock = frg::guard(&(*it)->_mutex);
 				if((*it)->_status == IrqStatus::standBy) {
 					infoLogger() << "thor: IRQ sink " << (*it)->name()
-							<< " is in standBy state" << frg::endlog;
-				}else{
+						     << " is in standBy state" << frg::endlog;
+				} else {
 					(*it)->dumpHardwareState();
 				}
 			}
@@ -225,8 +242,9 @@ void IrqPin::raise() {
 		}
 
 		sendEoi();
-		if(complain)
+		if(complain) {
 			dumpHardwareState();
+		}
 		return;
 	}
 
@@ -254,8 +272,9 @@ void IrqPin::_acknowledge() {
 	_dispatchAcks = true;
 	_dueSinks--;
 
-	if(!_dueSinks)
+	if(!_dueSinks) {
 		_dispatch();
+	}
 }
 
 void IrqPin::_nack() {
@@ -263,8 +282,9 @@ void IrqPin::_nack() {
 	assert(_dueSinks);
 	_dueSinks--;
 
-	if(!_dueSinks)
+	if(!_dueSinks) {
 		_dispatch();
+	}
 }
 
 void IrqPin::_kick(bool doClear) {
@@ -272,9 +292,10 @@ void IrqPin::_kick(bool doClear) {
 		assert(_inService);
 		assert(_dueSinks);
 		_dueSinks--;
-	}else{
-		if(!_inService)
+	} else {
+		if(!_inService) {
 			return;
+		}
 	}
 
 	_dispatchKicks = true;
@@ -282,25 +303,33 @@ void IrqPin::_kick(bool doClear) {
 	// Re-dispatch to clear the IRQ.
 	// Note that we also do *not* decrement _dueSinks here; in particular, the sink that
 	// was kicked might already have decremented _dueSinks.
-	if(!_dueSinks)
+	if(!_dueSinks) {
 		_dispatch();
+	}
 }
 
 // This function is called at the end of IRQ handling.
 // It unmasks IRQs that use maskThenEoi and checks for asynchronous NACK.
 void IrqPin::_dispatch() {
 	if(_dispatchAcks) {
-		if(_unstallExponent > 0)
+		if(_unstallExponent > 0) {
 			--_unstallExponent;
+		}
 	}
 
-	if(_dispatchKicks)
+	if(_dispatchKicks) {
 		_maskState &= ~maskedForNack;
+	}
 
 	if(_dispatchAcks || _dispatchKicks) {
-		if(logService)
-			infoLogger() << "\e[37m" "thor: IRQ pin " << name()
-					<< " is acked (asynchronously)" "\e[39m" << frg::endlog;
+		if(logService) {
+			infoLogger() << "\e[37m"
+					"thor: IRQ pin "
+				     << name()
+				     << " is acked (asynchronously)"
+					"\e[39m"
+				     << frg::endlog;
+		}
 
 		_inService = false;
 		_maskState &= ~maskedForService;
@@ -312,23 +341,24 @@ void IrqPin::_dispatch() {
 
 			_doService();
 		}
-	}else{
+	} else {
 		// Note that _inService returns true for NAKed IRQs.
 
-		infoLogger() << "\e[31mthor: IRQ " << _name
-				<< " was nacked (asynchronously)!\e[39m" << frg::endlog;
+		infoLogger() << "\e[31mthor: IRQ " << _name << " was nacked (asynchronously)!\e[39m"
+			     << frg::endlog;
 		for(auto it = _sinkList.begin(); it != _sinkList.end(); ++it) {
 			auto lock = frg::guard(&(*it)->_mutex);
 			if((*it)->_status == IrqStatus::standBy) {
 				infoLogger() << "thor: IRQ sink " << (*it)->name()
-						<< " is in standBy state" << frg::endlog;
-			}else{
+					     << " is in standBy state" << frg::endlog;
+			} else {
 				(*it)->dumpHardwareState();
 			}
 		}
 		_maskState |= maskedForNack;
-		if(_unstallExponent < 8)
+		if(_unstallExponent < 8) {
 			++_unstallExponent;
+		}
 		_unstallEvent.raise();
 	}
 
@@ -339,16 +369,20 @@ void IrqPin::warnIfPending() {
 	auto irq_lock = frg::guard(&irqMutex());
 	auto lock = frg::guard(&_mutex);
 
-	if(!_inService || (_maskState & maskedForNack))
+	if(!_inService || (_maskState & maskedForNack)) {
 		return;
+	}
 
 	if(systemClockSource()->currentNanos() - _raiseClock > 1000000000 && !_warnedAfterPending) {
 		auto log = infoLogger();
-		log << "\e[35mthor: Pending IRQ " << _name << " has not been"
-				" acked/nacked for more than one second.";
-		for(auto it = _sinkList.begin(); it != _sinkList.end(); ++it)
-			if((*it)->_status == IrqStatus::indefinite)
+		log << "\e[35mthor: Pending IRQ " << _name
+		    << " has not been"
+		       " acked/nacked for more than one second.";
+		for(auto it = _sinkList.begin(); it != _sinkList.end(); ++it) {
+			if((*it)->_status == IrqStatus::indefinite) {
 				log << "\n   Sink " << (*it)->name() << " has not acked/nacked";
+			}
+		}
 		log << "\e[39m" << frg::endlog;
 		_warnedAfterPending = true;
 	}
@@ -362,14 +396,20 @@ void IrqPin::_doService() {
 	assert(!_inService);
 	assert(!_raiseBuffered);
 
-	if(logService)
-		infoLogger() << "\e[37m" "thor: IRQ pin "
-				<< _name << " enters service" "\e[39m" << frg::endlog;
+	if(logService) {
+		infoLogger() << "\e[37m"
+				"thor: IRQ pin "
+			     << _name
+			     << " enters service"
+				"\e[39m"
+			     << frg::endlog;
+	}
 
 	_inService = true;
 	// maskThenEoi IRQs are masked while then are in service.
-	if(_strategy == IrqStrategy::maskThenEoi)
+	if(_strategy == IrqStrategy::maskThenEoi) {
 		_maskState |= maskedForService;
+	}
 
 	_dueSinks = 0;
 	_dispatchAcks = false;
@@ -378,9 +418,9 @@ void IrqPin::_doService() {
 	_raiseClock = systemClockSource()->currentNanos();
 	_warnedAfterPending = false;
 
-	if(_sinkList.empty())
-		infoLogger() << "\e[35mthor: No sink for IRQ "
-				<< _name << "\e[39m" << frg::endlog;
+	if(_sinkList.empty()) {
+		infoLogger() << "\e[35mthor: No sink for IRQ " << _name << "\e[39m" << frg::endlog;
+	}
 
 	unsigned int numAsynchronous = 0;
 	bool anyAck = false;
@@ -392,27 +432,34 @@ void IrqPin::_doService() {
 
 		if(status == IrqStatus::acked) {
 			anyAck = true;
-		}else if(status == IrqStatus::nacked) {
-			// We do not need to do anything here; we just do not increment numAsynchronous.
-		}else{
+		} else if(status == IrqStatus::nacked) {
+			// We do not need to do anything here; we just do not increment
+			// numAsynchronous.
+		} else {
 			numAsynchronous++;
 		}
 	}
 
 	if(!numAsynchronous) {
 		if(anyAck) {
-			if(logService)
-				infoLogger() << "\e[37m" "thor: IRQ pin " << name()
-						<< " is acked (asynchronously)" "\e[39m" << frg::endlog;
+			if(logService) {
+				infoLogger() << "\e[37m"
+						"thor: IRQ pin "
+					     << name()
+					     << " is acked (asynchronously)"
+						"\e[39m"
+					     << frg::endlog;
+			}
 
-			if(_unstallExponent > 0)
+			if(_unstallExponent > 0) {
 				--_unstallExponent;
+			}
 
 			_inService = false;
 			_maskState &= ~maskedForService;
-		}else{
+		} else {
 			infoLogger() << "\e[31mthor: IRQ " << _name
-					<< " was nacked (synchronously)!\e[39m" << frg::endlog;
+				     << " was nacked (synchronously)!\e[39m" << frg::endlog;
 			for(auto it = _sinkList.begin(); it != _sinkList.end(); ++it) {
 				auto lock = frg::guard(&(*it)->_mutex);
 				assert((*it)->_status != IrqStatus::standBy);
@@ -420,8 +467,9 @@ void IrqPin::_doService() {
 			}
 
 			_maskState |= maskedForNack;
-			if(_unstallExponent < 8)
+			if(_unstallExponent < 8) {
 				++_unstallExponent;
+			}
 			_unstallEvent.raise();
 		}
 		return;
@@ -429,8 +477,9 @@ void IrqPin::_doService() {
 
 	// The IRQ is handled asynchronously.
 
-	if(anyAck)
+	if(anyAck) {
 		_dispatchAcks = true;
+	}
 	_dueSinks = numAsynchronous;
 }
 
@@ -439,7 +488,7 @@ void IrqPin::_updateMask() {
 	if(!_maskState) {
 		_maskedRaiseCtr = 0;
 		unmask();
-	}else{
+	} else {
 		mask();
 	}
 }
@@ -451,8 +500,7 @@ void IrqPin::_updateMask() {
 // We create the IrqObject in latched state in order to ensure that users to not miss IRQs
 // that happened before the object was created.
 // However this can result in spurious raises.
-IrqObject::IrqObject(frg::string<KernelAlloc> name)
-: IrqSink{std::move(name)} { }
+IrqObject::IrqObject(frg::string<KernelAlloc> name) : IrqSink {std::move(name)} {}
 
 // TODO: Add a sequence parameter to this function and run the kernlet if the sequence advanced.
 //       This would prevent races between automate() and IRQs.
@@ -472,15 +520,17 @@ IrqStatus IrqObject::raise() {
 		auto result = _automationKernlet->invokeIrqAutomation();
 		if(result == 1) {
 			return IrqStatus::acked;
-		}else if(result == 2) {
+		} else if(result == 2) {
 			return IrqStatus::nacked;
-		}else{
+		} else {
 			assert(!result);
-			infoLogger() << "thor: IRQ automation does not handle the IRQ?" << frg::endlog;
+			infoLogger()
+				<< "thor: IRQ automation does not handle the IRQ?" << frg::endlog;
 			return IrqStatus::indefinite;
 		}
-	}else
+	} else {
 		return IrqStatus::indefinite;
+	}
 }
 
 void IrqObject::submitAwait(AwaitIrqNode *node, uint64_t sequence) {
@@ -492,9 +542,9 @@ void IrqObject::submitAwait(AwaitIrqNode *node, uint64_t sequence) {
 		node->_error = Error::success;
 		node->_sequence = currentSequence();
 		WorkQueue::post(node->_awaited);
-	}else{
+	} else {
 		_waitQueue.push_back(node);
 	}
 }
 
-} // namespace thor
+}  // namespace thor

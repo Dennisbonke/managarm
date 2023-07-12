@@ -50,6 +50,7 @@ struct Elf64_Sym {
 extern inline unsigned char ELF64_ST_BIND(unsigned char info) {
 	return info >> 4;
 }
+
 extern inline unsigned char ELF64_ST_TYPE(unsigned char info) {
 	return info & 0x0F;
 }
@@ -85,6 +86,7 @@ struct Elf64_Rela {
 extern inline Elf64_Xword ELF64_R_SYM(Elf64_Xword info) {
 	return info >> 32;
 }
+
 extern inline Elf64_Xword ELF64_R_TYPE(Elf64_Xword info) {
 	return info & 0xFFFFFFFF;
 }
@@ -167,6 +169,7 @@ enum {
 
 struct Elf64_Dyn {
 	Elf64_Sxword d_tag;
+
 	union {
 		Elf64_Xword d_val;
 		Elf64_Addr d_ptr;

@@ -1,31 +1,27 @@
 #pragma once
 
-#include <queue>
-#include <map>
-#include <unordered_map>
-#include <optional>
-#include <variant>
+#include "device.hpp"
+#include "fwd-decls.hpp"
+#include "property.hpp"
+#include "range-allocator.hpp"
 
 #include <arch/mem_space.hpp>
 #include <async/cancellation.hpp>
-#include <async/recurring-event.hpp>
-#include <async/oneshot-event.hpp>
 #include <async/mutex.hpp>
+#include <async/oneshot-event.hpp>
+#include <async/recurring-event.hpp>
 #include <async/result.hpp>
 #include <core/id-allocator.hpp>
 #include <helix/memory.hpp>
-
-#include "fwd-decls.hpp"
-
-#include "device.hpp"
-#include "range-allocator.hpp"
-#include "property.hpp"
-
 #include <libdrm/drm.h>
 #include <libdrm/drm_mode.h>
-
+#include <map>
+#include <optional>
 #include <protocols/fs/defs.hpp>
 #include <protocols/fs/server.hpp>
+#include <queue>
+#include <unordered_map>
+#include <variant>
 
 namespace drm_core {
 
@@ -48,15 +44,14 @@ struct File {
 	 */
 	read(void *object, const char *, void *buffer, size_t length);
 
-	static async::result<helix::BorrowedDescriptor>
-	accessMemory(void *object);
+	static async::result<helix::BorrowedDescriptor> accessMemory(void *object);
 
 	static async::result<void>
-	ioctl(void *object, uint32_t id, helix_ng::RecvInlineResult, helix::UniqueLane conversation);
+	ioctl(void *object, uint32_t id, helix_ng::RecvInlineResult, helix::UniqueLane conversation
+	);
 
 	static async::result<frg::expected<protocols::fs::Error, protocols::fs::PollWaitResult>>
-	pollWait(void *object, uint64_t sequence, int mask,
-			async::cancellation_token cancellation);
+	pollWait(void *object, uint64_t sequence, int mask, async::cancellation_token cancellation);
 
 	static async::result<frg::expected<protocols::fs::Error, protocols::fs::PollStatusResult>>
 	pollStatus(void *object);
@@ -93,13 +88,11 @@ struct File {
 	 */
 	void postEvent(Event event);
 
-	helix::BorrowedDescriptor statusPageMemory() {
-		return _statusPage.getMemory();
-	}
+	helix::BorrowedDescriptor statusPageMemory() { return _statusPage.getMemory(); }
 
 private:
-	async::detached _retirePageFlip(std::unique_ptr<Configuration> config,
-			uint64_t cookie, uint32_t crtc_id);
+	async::detached
+	_retirePageFlip(std::unique_ptr<Configuration> config, uint64_t cookie, uint32_t crtc_id);
 
 	std::shared_ptr<Device> _device;
 
@@ -142,26 +135,22 @@ struct PrimeFile {
 struct Configuration {
 	virtual ~Configuration() = default;
 
-	virtual bool capture(std::vector<Assignment> assignment, std::unique_ptr<AtomicState> &state) = 0;
+	virtual bool
+	capture(std::vector<Assignment> assignment, std::unique_ptr<AtomicState> &state) = 0;
 	virtual void dispose() = 0;
 	virtual void commit(std::unique_ptr<AtomicState> &state) = 0;
 
-	auto waitForCompletion() {
-		return _ev.wait();
-	}
+	auto waitForCompletion() { return _ev.wait(); }
 
 protected:
 	// TODO: Let derive classes handle the event?
-	void complete() {
-		_ev.raise();
-	}
+	void complete() { _ev.raise(); }
 
 private:
 	async::oneshot_event _ev;
 };
 
-async::detached serveDrmDevice(std::shared_ptr<drm_core::Device> device,
-		helix::UniqueLane lane);
+async::detached serveDrmDevice(std::shared_ptr<drm_core::Device> device, helix::UniqueLane lane);
 
 // ---------------------------------------------
 // Formats
@@ -175,17 +164,30 @@ struct FormatInfo {
 
 std::optional<FormatInfo> getFormatInfo(uint32_t fourcc);
 
-drm_mode_modeinfo makeModeInfo(const char *name, uint32_t type,
-		uint32_t clock, unsigned int hdisplay, unsigned int hsync_start,
-		unsigned int hsync_end, unsigned int htotal, unsigned int hskew,
-		unsigned int vdisplay, unsigned int vsync_start, unsigned int vsync_end,
-		unsigned int vtotal, unsigned int vscan, uint32_t flags);
+drm_mode_modeinfo makeModeInfo(
+	const char *name,
+	uint32_t type,
+	uint32_t clock,
+	unsigned int hdisplay,
+	unsigned int hsync_start,
+	unsigned int hsync_end,
+	unsigned int htotal,
+	unsigned int hskew,
+	unsigned int vdisplay,
+	unsigned int vsync_start,
+	unsigned int vsync_end,
+	unsigned int vtotal,
+	unsigned int vscan,
+	uint32_t flags
+);
 
-void addDmtModes(std::vector<drm_mode_modeinfo> &supported_modes,
-		unsigned int max_width, unsigned max_height);
+void addDmtModes(
+	std::vector<drm_mode_modeinfo> &supported_modes,
+	unsigned int max_width,
+	unsigned max_height
+);
 
 // Copies 16-byte aligned buffers. Expected to be faster than plain memcpy().
 extern "C" void fastCopy16(void *, const void *, size_t);
 
-} //namespace drm_core
-
+}  // namespace drm_core

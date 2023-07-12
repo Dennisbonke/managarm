@@ -1,23 +1,21 @@
 
-#include <memory>
-#include <iostream>
+#include "protocols/usb/client.hpp"
 
-#include <string.h>
+#include "usb.bragi.hpp"
 
 #include <async/result.hpp>
-#include <helix/ipc.hpp>
-
 #include <bragi/helpers-std.hpp>
-#include "usb.bragi.hpp"
-#include "protocols/usb/client.hpp"
+#include <helix/ipc.hpp>
+#include <iostream>
+#include <memory>
+#include <string.h>
 
 namespace protocols::usb {
 
 namespace {
 
 struct DeviceState final : DeviceData {
-	DeviceState(helix::UniqueLane lane)
-	:_lane(std::move(lane)) { }
+	DeviceState(helix::UniqueLane lane) : _lane(std::move(lane)) {}
 
 	arch::dma_pool *setupPool() override;
 	arch::dma_pool *bufferPool() override;
@@ -31,8 +29,7 @@ private:
 };
 
 struct ConfigurationState final : ConfigurationData {
-	ConfigurationState(helix::UniqueLane lane)
-	:_lane(std::move(lane)) { }
+	ConfigurationState(helix::UniqueLane lane) : _lane(std::move(lane)) {}
 
 	async::result<frg::expected<UsbError, Interface>>
 	useInterface(int number, int alternative) override;
@@ -42,8 +39,7 @@ private:
 };
 
 struct InterfaceState final : InterfaceData {
-	InterfaceState(helix::UniqueLane lane)
-	:_lane(std::move(lane)) { }
+	InterfaceState(helix::UniqueLane lane) : _lane(std::move(lane)) {}
 
 	async::result<frg::expected<UsbError, Endpoint>>
 	getEndpoint(PipeType type, int number) override;
@@ -52,10 +48,8 @@ private:
 	helix::UniqueLane _lane;
 };
 
-
 struct EndpointState final : EndpointData {
-	EndpointState(helix::UniqueLane lane)
-	:_lane(std::move(lane)) { }
+	EndpointState(helix::UniqueLane lane) : _lane(std::move(lane)) {}
 
 	async::result<frg::expected<UsbError>> transfer(ControlTransfer info) override;
 	async::result<frg::expected<UsbError, size_t>> transfer(InterruptTransfer info) override;
@@ -74,18 +68,27 @@ arch::dma_pool *DeviceState::bufferPool() {
 }
 
 frg::expected<UsbError> transformProtocolError(managarm::usb::Errors error) {
-	switch (error) {
+	switch(error) {
 		using enum UsbError;
 		using enum managarm::usb::Errors;
 
-		case SUCCESS: return frg::success;
-		case STALL: return stall;
-		case BABBLE: return babble;
-		case TIMEOUT: return timeout;
-		case UNSUPPORTED: return unsupported;
-		case OTHER: return other;
-		case ILLEGAL_REQUEST: assert(!"Illegal request in USB client"); break;
-		default: assert(!"Invalid error code in protocolErrorIntoApiError");
+	case SUCCESS:
+		return frg::success;
+	case STALL:
+		return stall;
+	case BABBLE:
+		return babble;
+	case TIMEOUT:
+		return timeout;
+	case UNSUPPORTED:
+		return unsupported;
+	case OTHER:
+		return other;
+	case ILLEGAL_REQUEST:
+		assert(!"Illegal request in USB client");
+		break;
+	default:
+		assert(!"Invalid error code in protocolErrorIntoApiError");
 	}
 
 	return UsbError::other;
@@ -97,7 +100,7 @@ async::result<frg::expected<UsbError, std::string>> DeviceState::configurationDe
 	auto [offer, sendReq, recvResp, recvData] = co_await helix_ng::exchangeMsgs(
 		_lane,
 		helix_ng::offer(
-			helix_ng::sendBragiHeadOnly(req, frg::stl_allocator{}),
+			helix_ng::sendBragiHeadOnly(req, frg::stl_allocator {}),
 			helix_ng::recvInline(),
 			helix_ng::recvInline()
 		)
@@ -126,7 +129,7 @@ async::result<frg::expected<UsbError, Configuration>> DeviceState::useConfigurat
 	auto [offer, sendReq, recvResp, pullLane] = co_await helix_ng::exchangeMsgs(
 		_lane,
 		helix_ng::offer(
-			helix_ng::sendBragiHeadOnly(req, frg::stl_allocator{}),
+			helix_ng::sendBragiHeadOnly(req, frg::stl_allocator {}),
 			helix_ng::recvInline(),
 			helix_ng::pullDescriptor()
 		)
@@ -146,27 +149,34 @@ async::result<frg::expected<UsbError, Configuration>> DeviceState::useConfigurat
 	co_return Configuration(std::move(state));
 }
 
-async::result<frg::expected<UsbError>>
-doControlTransfer(auto &lane, ControlTransfer info) {
+async::result<frg::expected<UsbError>> doControlTransfer(auto &lane, ControlTransfer info) {
 	managarm::usb::TransferRequest req;
 
 	req.set_type(managarm::usb::XferType::CONTROL);
-	req.set_dir(info.flags == kXferToDevice
-		    ? managarm::usb::XferDirection::TO_DEVICE
-		    : managarm::usb::XferDirection::TO_HOST);
+	req.set_dir(
+		info.flags == kXferToDevice ? managarm::usb::XferDirection::TO_DEVICE
+					    : managarm::usb::XferDirection::TO_HOST
+	);
 
 	req.set_length(info.buffer.size());
 
 	if(info.flags == kXferToDevice) {
-		auto [offer, sendReq, sendSetup, sendData, recvResp] = co_await helix_ng::exchangeMsgs(
-			lane,
-			helix_ng::offer(
-				helix_ng::sendBragiHeadOnly(req, frg::stl_allocator{}),
-				helix_ng::sendBuffer(info.setup.data(), sizeof(SetupPacket)),
-				helix_ng::sendBuffer(info.buffer.data(), info.buffer.size()),
-				helix_ng::recvInline()
-			)
-		);
+		auto [offer, sendReq, sendSetup, sendData, recvResp] =
+			co_await helix_ng::exchangeMsgs(
+				lane,
+				helix_ng::offer(
+					helix_ng::sendBragiHeadOnly(req, frg::stl_allocator {}),
+					helix_ng::sendBuffer(
+						info.setup.data(),
+						sizeof(SetupPacket)
+					),
+					helix_ng::sendBuffer(
+						info.buffer.data(),
+						info.buffer.size()
+					),
+					helix_ng::recvInline()
+				)
+			);
 
 		HEL_CHECK(offer.error());
 		HEL_CHECK(sendReq.error());
@@ -177,16 +187,20 @@ doControlTransfer(auto &lane, ControlTransfer info) {
 		auto resp = bragi::parse_head_only<managarm::usb::SvrResponse>(recvResp);
 
 		FRG_CO_TRY(transformProtocolError(resp->error()));
-	}else{
-		auto [offer, sendReq, sendSetup, recvResp, recvData] = co_await helix_ng::exchangeMsgs(
-			lane,
-			helix_ng::offer(
-				helix_ng::sendBragiHeadOnly(req, frg::stl_allocator{}),
-				helix_ng::sendBuffer(info.setup.data(), sizeof(SetupPacket)),
-				helix_ng::recvInline(),
-				helix_ng::recvBuffer(info.buffer.data(), info.buffer.size())
-			)
-		);
+	} else {
+		auto [offer, sendReq, sendSetup, recvResp, recvData] =
+			co_await helix_ng::exchangeMsgs(
+				lane,
+				helix_ng::offer(
+					helix_ng::sendBragiHeadOnly(req, frg::stl_allocator {}),
+					helix_ng::sendBuffer(
+						info.setup.data(),
+						sizeof(SetupPacket)
+					),
+					helix_ng::recvInline(),
+					helix_ng::recvBuffer(info.buffer.data(), info.buffer.size())
+				)
+			);
 
 		HEL_CHECK(offer.error());
 		HEL_CHECK(sendReq.error());
@@ -217,7 +231,7 @@ ConfigurationState::useInterface(int number, int alternative) {
 	auto [offer, sendReq, recvResp, pullLane] = co_await helix_ng::exchangeMsgs(
 		_lane,
 		helix_ng::offer(
-			helix_ng::sendBragiHeadOnly(req, frg::stl_allocator{}),
+			helix_ng::sendBragiHeadOnly(req, frg::stl_allocator {}),
 			helix_ng::recvInline(),
 			helix_ng::pullDescriptor()
 		)
@@ -247,7 +261,7 @@ InterfaceState::getEndpoint(PipeType type, int number) {
 	auto [offer, sendReq, recvResp, pullLane] = co_await helix_ng::exchangeMsgs(
 		_lane,
 		helix_ng::offer(
-			helix_ng::sendBragiHeadOnly(req, frg::stl_allocator{}),
+			helix_ng::sendBragiHeadOnly(req, frg::stl_allocator {}),
 			helix_ng::recvInline(),
 			helix_ng::pullDescriptor()
 		)
@@ -267,30 +281,30 @@ InterfaceState::getEndpoint(PipeType type, int number) {
 	co_return Endpoint(std::move(state));
 }
 
-template <typename XferInfo>
+template<typename XferInfo>
 async::result<frg::expected<UsbError, size_t>>
 doTransferOfType(auto &lane, managarm::usb::XferType type, XferInfo info) {
 	managarm::usb::TransferRequest req;
 
 	req.set_type(type);
-	req.set_dir(info.flags == kXferToDevice
-		    ? managarm::usb::XferDirection::TO_DEVICE
-		    : managarm::usb::XferDirection::TO_HOST);
+	req.set_dir(
+		info.flags == kXferToDevice ? managarm::usb::XferDirection::TO_DEVICE
+					    : managarm::usb::XferDirection::TO_HOST
+	);
 
 	req.set_allow_short_packets(info.allowShortPackets);
 	req.set_lazy_notification(info.lazyNotification);
 	req.set_length(info.buffer.size());
 
 	if(info.flags == kXferToDevice) {
-		auto [offer, sendReq, sendData, recvResp] =
-			co_await helix_ng::exchangeMsgs(
-				lane,
-				helix_ng::offer(
-					helix_ng::sendBragiHeadOnly(req, frg::stl_allocator{}),
-					helix_ng::sendBuffer(info.buffer.data(), info.buffer.size()),
-					helix_ng::recvInline()
-				)
-			);
+		auto [offer, sendReq, sendData, recvResp] = co_await helix_ng::exchangeMsgs(
+			lane,
+			helix_ng::offer(
+				helix_ng::sendBragiHeadOnly(req, frg::stl_allocator {}),
+				helix_ng::sendBuffer(info.buffer.data(), info.buffer.size()),
+				helix_ng::recvInline()
+			)
+		);
 
 		HEL_CHECK(offer.error());
 		HEL_CHECK(sendReq.error());
@@ -302,11 +316,11 @@ doTransferOfType(auto &lane, managarm::usb::XferType type, XferInfo info) {
 		FRG_CO_TRY(transformProtocolError(resp->error()));
 
 		co_return resp->size();
-	}else{
+	} else {
 		auto [offer, sendReq, recvResp, recvData] = co_await helix_ng::exchangeMsgs(
 			lane,
 			helix_ng::offer(
-				helix_ng::sendBragiHeadOnly(req, frg::stl_allocator{}),
+				helix_ng::sendBragiHeadOnly(req, frg::stl_allocator {}),
 				helix_ng::recvInline(),
 				helix_ng::recvBuffer(info.buffer.data(), info.buffer.size())
 			)
@@ -338,11 +352,10 @@ async::result<frg::expected<UsbError, size_t>> EndpointState::transfer(BulkTrans
 	co_return co_await doTransferOfType(_lane, managarm::usb::XferType::BULK, info);
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 Device connect(helix::UniqueLane lane) {
 	return Device(std::make_shared<DeviceState>(std::move(lane)));
 }
 
-} // namespace protocols::usb
-
+}  // namespace protocols::usb

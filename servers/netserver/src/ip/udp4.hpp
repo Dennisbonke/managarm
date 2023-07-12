@@ -1,8 +1,8 @@
 #pragma once
 
 #include <helix/ipc.hpp>
-#include <smarter.hpp>
 #include <map>
+#include <smarter.hpp>
 
 class Ip4Packet;
 
@@ -17,11 +17,13 @@ struct Endpoint {
 bool operator<(const Endpoint &l, const Endpoint &r);
 
 struct Udp4Socket;
+
 struct Udp4 {
 	void feedDatagram(smarter::shared_ptr<const Ip4Packet>);
 	bool tryBind(smarter::shared_ptr<Udp4Socket> socket, Endpoint addr);
 	bool unbind(Endpoint remote);
 	void serveSocket(helix::UniqueLane lane);
+
 private:
 	std::map<Endpoint, smarter::shared_ptr<Udp4Socket>> binds;
 };

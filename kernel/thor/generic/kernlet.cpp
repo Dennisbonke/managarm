@@ -2,27 +2,27 @@
 #include <stdint.h>
 
 #ifdef THOR_ARCH_SUPPORTS_PIO
-#include <arch/io_space.hpp>
+#	include <arch/io_space.hpp>
 #endif
+#include "kernlet.frigg_pb.hpp"
+#include "mbus.frigg_pb.hpp"
+
 #include <arch/mem_space.hpp>
-#include <frg/string.hpp>
 #include <elf.h>
-#include <thor-internal/universe.hpp>
+#include <frg/string.hpp>
 #include <thor-internal/coroutine.hpp>
 #include <thor-internal/fiber.hpp>
 #include <thor-internal/kernlet.hpp>
 #include <thor-internal/physical.hpp>
 #include <thor-internal/stream.hpp>
-
-#include "mbus.frigg_pb.hpp"
-#include "kernlet.frigg_pb.hpp"
+#include <thor-internal/universe.hpp>
 
 namespace thor {
 
 namespace {
-	constexpr bool logBinding = false;
-	constexpr bool logIo = false;
-}
+constexpr bool logBinding = false;
+constexpr bool logIo = false;
+}  // namespace
 
 extern frg::manual_box<LaneHandle> mbusClient;
 
@@ -30,23 +30,27 @@ extern frg::manual_box<LaneHandle> mbusClient;
 // KernletObject class.
 // ------------------------------------------------------------------------
 
-KernletObject::KernletObject(void *entry,
-		const frg::vector<KernletParameterType, KernelAlloc> &bind_types)
-: _entry(entry), _bindDefns{*kernelAlloc}, _instanceSize{0} {
+KernletObject::KernletObject(
+	void *entry,
+	const frg::vector<KernletParameterType, KernelAlloc> &bind_types
+)
+: _entry(entry)
+, _bindDefns {*kernelAlloc}
+, _instanceSize {0} {
 	for(auto type : bind_types) {
 		if(type == KernletParameterType::offset) {
 			_instanceSize = (_instanceSize + 3) & ~size_t(3);
 			_bindDefns.push_back({type, _instanceSize});
 			_instanceSize += 4;
-		}else if(type == KernletParameterType::memoryView) {
+		} else if(type == KernletParameterType::memoryView) {
 			_instanceSize = (_instanceSize + 7) & ~size_t(7);
 			_bindDefns.push_back({type, _instanceSize});
 			_instanceSize += 8;
-		}else if(type == KernletParameterType::bitsetEvent) {
+		} else if(type == KernletParameterType::bitsetEvent) {
 			_instanceSize = (_instanceSize + 7) & ~size_t(7);
 			_bindDefns.push_back({type, _instanceSize});
 			_instanceSize += 8;
-		}else{
+		} else {
 			assert(!"Unexpected kernlet parameter type");
 		}
 	}
@@ -69,34 +73,37 @@ const KernletParameterDefn &KernletObject::defnOfBindParameter(size_t index) {
 // ------------------------------------------------------------------------
 
 BoundKernlet::BoundKernlet(smarter::shared_ptr<KernletObject> object)
-: _object{std::move(object)} {
+: _object {std::move(object)} {
 	_instance = reinterpret_cast<char *>(kernelAlloc->allocate(_object->instanceSize()));
 }
 
 void BoundKernlet::setupOffsetBinding(size_t index, uint32_t offset) {
 	assert(index < _object->numberOfBindParameters());
 	const auto &defn = _object->defnOfBindParameter(index);
-	if(logBinding)
-		infoLogger() << "thor: Binding offset " << offset
-				<< " to instance offset " << defn.offset << frg::endlog;
+	if(logBinding) {
+		infoLogger() << "thor: Binding offset " << offset << " to instance offset "
+			     << defn.offset << frg::endlog;
+	}
 	memcpy(_instance + defn.offset, &offset, sizeof(uint32_t));
 }
 
 void BoundKernlet::setupMemoryViewBinding(size_t index, void *p) {
 	assert(index < _object->numberOfBindParameters());
 	const auto &defn = _object->defnOfBindParameter(index);
-	if(logBinding)
-		infoLogger() << "thor: Binding memory view " << p
-				<< " to instance offset " << defn.offset << frg::endlog;
+	if(logBinding) {
+		infoLogger() << "thor: Binding memory view " << p << " to instance offset "
+			     << defn.offset << frg::endlog;
+	}
 	memcpy(_instance + defn.offset, &p, sizeof(void *));
 }
 
 void BoundKernlet::setupBitsetEventBinding(size_t index, smarter::shared_ptr<BitsetEvent> event) {
 	assert(index < _object->numberOfBindParameters());
 	const auto &defn = _object->defnOfBindParameter(index);
-	if(logBinding)
-		infoLogger() << "thor: Binding bitset event " << (void *)event.get()
-				<< " to instance offset " << defn.offset << frg::endlog;
+	if(logBinding) {
+		infoLogger() << "thor: Binding bitset event " << (void *) event.get()
+			     << " to instance offset " << defn.offset << frg::endlog;
+	}
 	auto p = event.get();
 	memcpy(_instance + defn.offset, &p, sizeof(void *));
 }
@@ -112,17 +119,17 @@ int BoundKernlet::invokeIrqAutomation() {
 
 namespace {
 
-smarter::shared_ptr<KernletObject> processElfDso(const char *buffer,
-		const frg::vector<KernletParameterType, KernelAlloc> &bind_types) {
+smarter::shared_ptr<KernletObject> processElfDso(
+	const char *buffer,
+	const frg::vector<KernletParameterType, KernelAlloc> &bind_types
+) {
 	auto base = reinterpret_cast<char *>(KernelVirtualMemory::global().allocate(0x10000));
 
 	// Check the EHDR file header.
 	Elf64_Ehdr ehdr;
 	memcpy(&ehdr, buffer, sizeof(Elf64_Ehdr));
-	assert(ehdr.e_ident[0] == 0x7F
-			&& ehdr.e_ident[1] == 'E'
-			&& ehdr.e_ident[2] == 'L'
-			&& ehdr.e_ident[3] == 'F');
+	assert(ehdr.e_ident[0] == 0x7F && ehdr.e_ident[1] == 'E' && ehdr.e_ident[2] == 'L'
+	       && ehdr.e_ident[3] == 'F');
 
 	// Load all PHDRs.
 	Elf64_Dyn *dynamic = nullptr;
@@ -138,29 +145,27 @@ smarter::shared_ptr<KernletObject> processElfDso(const char *buffer,
 			// Map pages for the segment.
 			// TODO: We need write permission to fill the page. Get rid of it.
 			uint32_t pf = page_access::write;
-			if(phdr.p_flags & PF_X)
+			if(phdr.p_flags & PF_X) {
 				pf |= page_access::execute;
+			}
 
 			for(size_t pg = 0; pg < misalign + phdr.p_memsz; pg += kPageSize) {
 				auto va = reinterpret_cast<VirtualAddr>(base + phdr.p_vaddr + pg)
-						& ~(kPageSize - 1);
+					& ~(kPageSize - 1);
 				auto physical = physicalAllocator->allocate(kPageSize);
 				assert(physical != PhysicalAddr(-1) && "OOM");
-				KernelPageSpace::global().mapSingle4k(va, physical,
-						pf, CachingMode::null);
+				KernelPageSpace::global()
+					.mapSingle4k(va, physical, pf, CachingMode::null);
 			}
 
 			// Fill the segment.
 			memset(base + phdr.p_vaddr, 0, phdr.p_memsz);
 			memcpy(base + phdr.p_vaddr, buffer + phdr.p_offset, phdr.p_filesz);
-		}else if(phdr.p_type == PT_DYNAMIC) {
+		} else if(phdr.p_type == PT_DYNAMIC) {
 			dynamic = reinterpret_cast<Elf64_Dyn *>(base + phdr.p_vaddr);
-		}else if(phdr.p_type == PT_NOTE
-				|| phdr.p_type == PT_GNU_EH_FRAME
-				|| phdr.p_type == PT_GNU_STACK
-				|| phdr.p_type == PT_GNU_RELRO) {
+		} else if(phdr.p_type == PT_NOTE || phdr.p_type == PT_GNU_EH_FRAME || phdr.p_type == PT_GNU_STACK || phdr.p_type == PT_GNU_RELRO) {
 			// Ignore the PHDR.
-		}else{
+		} else {
 			assert(!"Unexpected PHDR");
 		}
 	}
@@ -214,70 +219,69 @@ smarter::shared_ptr<KernletObject> processElfDso(const char *buffer,
 	assert(hash_tab);
 
 	// Perform relocations.
-	auto resolveExternal = [] (frg::string_view name) -> void * {
+	auto resolveExternal = [](frg::string_view name) -> void * {
 #ifdef THOR_ARCH_SUPPORTS_PIO
-		uint16_t (*abi_pio_read16)(ptrdiff_t) =
-			[] (ptrdiff_t offset) -> uint16_t {
-				if(logIo)
-					infoLogger() << "__pio_read16 on offset: " << offset << frg::endlog;
-				auto value = arch::io_ops<uint16_t>::load(offset);
-				if(logIo)
-					infoLogger() << "    Read " << (unsigned int)value << frg::endlog;
-				return value;
-			};
+		uint16_t (*abi_pio_read16)(ptrdiff_t) = [](ptrdiff_t offset) -> uint16_t {
+			if(logIo)
+				infoLogger() << "__pio_read16 on offset: " << offset << frg::endlog;
+			auto value = arch::io_ops<uint16_t>::load(offset);
+			if(logIo)
+				infoLogger() << "    Read " << (unsigned int) value << frg::endlog;
+			return value;
+		};
 
-		void (*abi_pio_write16)(ptrdiff_t, uint16_t) =
-			[] (ptrdiff_t offset, uint16_t value) {
-				if(logIo)
-					infoLogger() << "__pio_write16 on offset: " << offset << frg::endlog;
-				arch::io_ops<uint16_t>::store(offset, value);
-				if(logIo)
-					infoLogger() << "    Wrote " << value << frg::endlog;
-			};
+		void (*abi_pio_write16)(ptrdiff_t, uint16_t) = [](ptrdiff_t offset,
+								  uint16_t value) {
+			if(logIo)
+				infoLogger()
+					<< "__pio_write16 on offset: " << offset << frg::endlog;
+			arch::io_ops<uint16_t>::store(offset, value);
+			if(logIo)
+				infoLogger() << "    Wrote " << value << frg::endlog;
+		};
 #endif
 
 		uint8_t (*abi_mmio_read8)(const char *, ptrdiff_t) =
-			[] (const char *base, ptrdiff_t offset) -> uint8_t {
-				if(logIo)
-					infoLogger() << "__mmio_read8 on " << (void *)base
-							<< ", offset: " << offset << frg::endlog;
-				auto p = reinterpret_cast<const uint8_t *>(base + offset);
-				auto value = arch::mem_ops<uint8_t>::load(p);
-				if(logIo)
-					infoLogger() << "    Read " << (unsigned int)value << frg::endlog;
-				return value;
-			};
+			[](const char *base, ptrdiff_t offset) -> uint8_t {
+			if(logIo)
+				infoLogger() << "__mmio_read8 on " << (void *) base
+					     << ", offset: " << offset << frg::endlog;
+			auto p = reinterpret_cast<const uint8_t *>(base + offset);
+			auto value = arch::mem_ops<uint8_t>::load(p);
+			if(logIo)
+				infoLogger() << "    Read " << (unsigned int) value << frg::endlog;
+			return value;
+		};
 		uint32_t (*abi_mmio_read32)(const char *, ptrdiff_t) =
-			[] (const char *base, ptrdiff_t offset) -> uint32_t {
-				if(logIo)
-					infoLogger() << "__mmio_read32 on " << (void *)base
-							<< ", offset: " << offset << frg::endlog;
-				auto p = reinterpret_cast<const uint32_t *>(base + offset);
-				auto value = arch::mem_ops<uint32_t>::load(p);
-				if(logIo)
-					infoLogger() << "    Read " << value << frg::endlog;
-				return value;
-			};
+			[](const char *base, ptrdiff_t offset) -> uint32_t {
+			if(logIo)
+				infoLogger() << "__mmio_read32 on " << (void *) base
+					     << ", offset: " << offset << frg::endlog;
+			auto p = reinterpret_cast<const uint32_t *>(base + offset);
+			auto value = arch::mem_ops<uint32_t>::load(p);
+			if(logIo)
+				infoLogger() << "    Read " << value << frg::endlog;
+			return value;
+		};
 
 		void (*abi_mmio_write32)(char *, ptrdiff_t, uint32_t) =
-			[] (char *base, ptrdiff_t offset, uint32_t value) {
+			[](char *base, ptrdiff_t offset, uint32_t value) {
 				if(logIo)
-					infoLogger() << "__mmio_write32 on " << (void *)base
-							<< ", offset: " << offset << frg::endlog;
+					infoLogger() << "__mmio_write32 on " << (void *) base
+						     << ", offset: " << offset << frg::endlog;
 				auto p = reinterpret_cast<uint32_t *>(base + offset);
 				arch::mem_ops<uint32_t>::store(p, value);
 				if(logIo)
 					infoLogger() << "    Wrote " << value << frg::endlog;
 			};
 
-		void (*abi_trigger_bitset)(void *, uint32_t) =
-			[] (void *p, uint32_t bits) {
-				if(logIo)
-					infoLogger() << "__trigger_bitset on "
-							<< p << ", bits: " << bits << frg::endlog;
-				auto event = static_cast<BitsetEvent *>(p);
-				event->trigger(bits);
-			};
+		void (*abi_trigger_bitset)(void *, uint32_t) = [](void *p, uint32_t bits) {
+			if(logIo)
+				infoLogger() << "__trigger_bitset on " << p << ", bits: " << bits
+					     << frg::endlog;
+			auto event = static_cast<BitsetEvent *>(p);
+			event->trigger(bits);
+		};
 
 #ifdef THOR_ARCH_SUPPORTS_PIO
 		if(name == "__pio_read16")
@@ -305,44 +309,48 @@ smarter::shared_ptr<KernletObject> processElfDso(const char *buffer,
 
 		auto rp = reinterpret_cast<uint64_t *>(base + reloc->r_offset);
 		auto symbol = sym_tab + ELF64_R_SYM(reloc->r_info);
-		auto sym_name = frg::string_view{str_tab + symbol->st_name};
+		auto sym_name = frg::string_view {str_tab + symbol->st_name};
 		*rp = reinterpret_cast<uint64_t>(resolveExternal(sym_name));
 	}
 
 	// Look up symbols.
-	auto elf64Hash = [] (frg::string_view string) -> uint32_t {
+	auto elf64Hash = [](frg::string_view string) -> uint32_t {
 		uint32_t h = 0;
 		for(size_t i = 0; i < string.size(); ++i) {
-			h = (h << 4) + (uint8_t)string[i];
+			h = (h << 4) + (uint8_t) string[i];
 			uint32_t g = h & 0xF0000000;
-			if(g)
+			if(g) {
 				h ^= g >> 24;
+			}
 			h &= 0x0FFFFFFF;
 		}
 		return h;
 	};
 
-	auto eligible = [&] (const Elf64_Sym *candidate) {
-		if(candidate->st_shndx == SHN_UNDEF)
+	auto eligible = [&](const Elf64_Sym *candidate) {
+		if(candidate->st_shndx == SHN_UNDEF) {
 			return false;
+		}
 		auto bind = ELF64_ST_BIND(candidate->st_info);
-		if(bind != STB_GLOBAL && bind != STB_WEAK)
+		if(bind != STB_GLOBAL && bind != STB_WEAK) {
 			return false;
+		}
 		return true;
 	};
 
-	auto lookup = [&] (frg::string_view name) -> void * {
-		auto n = hash_tab[0]; // Number of buckets.
-		auto b = elf64Hash(name) % n; // First bucket the symbol can appear in.
+	auto lookup = [&](frg::string_view name) -> void * {
+		auto n = hash_tab[0];  // Number of buckets.
+		auto b = elf64Hash(name) % n;  // First bucket the symbol can appear in.
 		for(auto idx = hash_tab[2 + b]; idx; idx = hash_tab[2 + n + idx]) {
 			auto candidate = sym_tab + idx;
-			auto cand_name = frg::string_view{str_tab + candidate->st_name};
-			if(!eligible(candidate) || cand_name != name)
+			auto cand_name = frg::string_view {str_tab + candidate->st_name};
+			if(!eligible(candidate) || cand_name != name) {
 				continue;
+			}
 			return base + candidate->st_value;
 		}
-		panicLogger() << "thor: Unable to resolve kernel symbol '"
-				<< name.data() << "'" << frg::endlog;
+		panicLogger() << "thor: Unable to resolve kernel symbol '" << name.data() << "'"
+			      << frg::endlog;
 		__builtin_unreachable();
 	};
 
@@ -351,18 +359,20 @@ smarter::shared_ptr<KernletObject> processElfDso(const char *buffer,
 }
 
 coroutine<Error> handleReq(LaneHandle boundLane) {
-	auto [acceptError, lane] = co_await AcceptSender{boundLane};
-	if(acceptError != Error::success)
+	auto [acceptError, lane] = co_await AcceptSender {boundLane};
+	if(acceptError != Error::success) {
 		co_return acceptError;
+	}
 
-	auto [reqError, reqBuffer] = co_await RecvBufferSender{lane};
-	if(reqError != Error::success)
+	auto [reqError, reqBuffer] = co_await RecvBufferSender {lane};
+	if(reqError != Error::success) {
 		co_return reqError;
+	}
 	managarm::kernlet::CntRequest<KernelAlloc> req(*kernelAlloc);
 	req.ParseFromArray(reqBuffer.data(), reqBuffer.size());
 
 	if(req.req_type() == managarm::kernlet::CntReqType::UPLOAD) {
-		frg::vector<KernletParameterType, KernelAlloc> bind_types{*kernelAlloc};
+		frg::vector<KernletParameterType, KernelAlloc> bind_types {*kernelAlloc};
 		for(size_t i = 0; i < req.bind_types_size(); i++) {
 			switch(req.bind_types(i)) {
 			case managarm::kernlet::ParameterType::OFFSET:
@@ -379,42 +389,48 @@ coroutine<Error> handleReq(LaneHandle boundLane) {
 			}
 		}
 
-		auto [elfError, elfBuffer] = co_await RecvBufferSender{lane};
-		if(elfError != Error::success)
+		auto [elfError, elfBuffer] = co_await RecvBufferSender {lane};
+		if(elfError != Error::success) {
 			co_return elfError;
-		auto kernlet = processElfDso(reinterpret_cast<char *>(elfBuffer.data()), bind_types);
+		}
+		auto kernlet =
+			processElfDso(reinterpret_cast<char *>(elfBuffer.data()), bind_types);
 
 		managarm::kernlet::SvrResponse<KernelAlloc> resp(*kernelAlloc);
 		resp.set_error(managarm::kernlet::Error::SUCCESS);
 
 		frg::string<KernelAlloc> ser(*kernelAlloc);
 		resp.SerializeToString(&ser);
-		frg::unique_memory<KernelAlloc> respBuffer{*kernelAlloc, ser.size()};
+		frg::unique_memory<KernelAlloc> respBuffer {*kernelAlloc, ser.size()};
 		memcpy(respBuffer.data(), ser.data(), ser.size());
-		auto respError = co_await SendBufferSender{lane, std::move(respBuffer)};
-		if(respError != Error::success)
+		auto respError = co_await SendBufferSender {lane, std::move(respBuffer)};
+		if(respError != Error::success) {
 			co_return respError;
-		auto objectError = co_await PushDescriptorSender{lane,
-				KernletObjectDescriptor{std::move(kernlet)}};
-		if(objectError != Error::success)
+		}
+		auto objectError = co_await PushDescriptorSender {
+			lane,
+			KernletObjectDescriptor {std::move(kernlet)}};
+		if(objectError != Error::success) {
 			co_return objectError;
-	}else{
+		}
+	} else {
 		managarm::kernlet::SvrResponse<KernelAlloc> resp(*kernelAlloc);
 		resp.set_error(managarm::kernlet::Error::ILLEGAL_REQUEST);
 
 		frg::string<KernelAlloc> ser(*kernelAlloc);
 		resp.SerializeToString(&ser);
-		frg::unique_memory<KernelAlloc> respBuffer{*kernelAlloc, ser.size()};
+		frg::unique_memory<KernelAlloc> respBuffer {*kernelAlloc, ser.size()};
 		memcpy(respBuffer.data(), ser.data(), ser.size());
-		auto respError = co_await SendBufferSender{lane, std::move(respBuffer)};
-		if(respError != Error::success)
+		auto respError = co_await SendBufferSender {lane, std::move(respBuffer)};
+		if(respError != Error::success) {
 			co_return respError;
+		}
 	}
 
 	co_return Error::success;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 // ------------------------------------------------------------------------
 // mbus object creation and management.
@@ -425,7 +441,7 @@ namespace {
 coroutine<void> handleBind(LaneHandle objectLane);
 
 coroutine<void> createObject(LaneHandle mbusLane) {
-	auto [offerError, lane] = co_await OfferSender{mbusLane};
+	auto [offerError, lane] = co_await OfferSender {mbusLane};
 	assert(offerError == Error::success && "Unexpected mbus transaction");
 
 	managarm::mbus::Property<KernelAlloc> cls_prop(*kernelAlloc);
@@ -440,30 +456,31 @@ coroutine<void> createObject(LaneHandle mbusLane) {
 
 	frg::string<KernelAlloc> ser(*kernelAlloc);
 	req.SerializeToString(&ser);
-	frg::unique_memory<KernelAlloc> reqBuffer{*kernelAlloc, ser.size()};
+	frg::unique_memory<KernelAlloc> reqBuffer {*kernelAlloc, ser.size()};
 	memcpy(reqBuffer.data(), ser.data(), ser.size());
-	auto reqError = co_await SendBufferSender{lane, std::move(reqBuffer)};
+	auto reqError = co_await SendBufferSender {lane, std::move(reqBuffer)};
 	assert(reqError == Error::success && "Unexpected mbus transaction");
 
-	auto [respError, respBuffer] = co_await RecvBufferSender{lane};
+	auto [respError, respBuffer] = co_await RecvBufferSender {lane};
 	assert(respError == Error::success && "Unexpected mbus transaction");
 	managarm::mbus::SvrResponse<KernelAlloc> resp(*kernelAlloc);
 	resp.ParseFromArray(respBuffer.data(), respBuffer.size());
 	assert(resp.error() == managarm::mbus::Error::SUCCESS);
 
-	auto [objectError, objectDescriptor] = co_await PullDescriptorSender{lane};
+	auto [objectError, objectDescriptor] = co_await PullDescriptorSender {lane};
 	assert(objectError == Error::success && "Unexpected mbus transaction");
 	assert(objectDescriptor.is<LaneDescriptor>());
 	auto objectLane = objectDescriptor.get<LaneDescriptor>().handle;
-	while(true)
+	while(true) {
 		co_await handleBind(objectLane);
+	}
 }
 
 coroutine<void> handleBind(LaneHandle objectLane) {
-	auto [acceptError, lane] = co_await AcceptSender{objectLane};
+	auto [acceptError, lane] = co_await AcceptSender {objectLane};
 	assert(acceptError == Error::success && "Unexpected mbus transaction");
 
-	auto [reqError, reqBuffer] = co_await RecvBufferSender{lane};
+	auto [reqError, reqBuffer] = co_await RecvBufferSender {lane};
 	assert(reqError == Error::success && "Unexpected mbus transaction");
 	managarm::mbus::SvrRequest<KernelAlloc> req(*kernelAlloc);
 	req.ParseFromArray(reqBuffer.data(), reqBuffer.size());
@@ -474,30 +491,33 @@ coroutine<void> handleBind(LaneHandle objectLane) {
 
 	frg::string<KernelAlloc> ser(*kernelAlloc);
 	resp.SerializeToString(&ser);
-	frg::unique_memory<KernelAlloc> respBuffer{*kernelAlloc, ser.size()};
+	frg::unique_memory<KernelAlloc> respBuffer {*kernelAlloc, ser.size()};
 	memcpy(respBuffer.data(), ser.data(), ser.size());
-	auto respError = co_await SendBufferSender{lane, std::move(respBuffer)};
+	auto respError = co_await SendBufferSender {lane, std::move(respBuffer)};
 	assert(respError == Error::success && "Unexpected mbus transaction");
 
 	auto stream = createStream();
-	auto boundError = co_await PushDescriptorSender{lane, LaneDescriptor{stream.get<1>()}};
+	auto boundError = co_await PushDescriptorSender {lane, LaneDescriptor {stream.get<1>()}};
 	assert(boundError == Error::success && "Unexpected mbus transaction");
 	auto boundLane = stream.get<0>();
 
-	async::detach_with_allocator(*kernelAlloc, ([] (LaneHandle boundLane) -> coroutine<void> {
+	async::detach_with_allocator(*kernelAlloc, ([](LaneHandle boundLane) -> coroutine<void> {
 		while(true) {
 			auto error = co_await handleReq(boundLane);
-			if(error == Error::endOfLane)
+			if(error == Error::endOfLane) {
 				break;
-			if(isRemoteIpcError(error))
+			}
+			if(isRemoteIpcError(error)) {
 				infoLogger() << "thor: Aborting svrctl request"
-						" after remote violated the protocol" << frg::endlog;
+						" after remote violated the protocol"
+					     << frg::endlog;
+			}
 			assert(error == Error::success);
 		}
 	})(boundLane));
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 void initializeKernletCtl() {
 	// Create a fiber to manage requests to the kernletctl mbus object.
@@ -506,5 +526,4 @@ void initializeKernletCtl() {
 	});
 }
 
-} // namespace thor
-
+}  // namespace thor

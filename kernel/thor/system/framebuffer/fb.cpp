@@ -1,16 +1,14 @@
 
+#include <hw.frigg_bragi.hpp>
+#include <mbus.frigg_pb.hpp>
 #include <render-text.hpp>
 #include <thor-internal/arch/cpu.hpp>
 #include <thor-internal/fiber.hpp>
+#include <thor-internal/framebuffer/boot-screen.hpp>
+#include <thor-internal/framebuffer/fb.hpp>
 #include <thor-internal/io.hpp>
 #include <thor-internal/kernel_heap.hpp>
 #include <thor-internal/pci/pci.hpp>
-
-#include <thor-internal/framebuffer/fb.hpp>
-#include <thor-internal/framebuffer/boot-screen.hpp>
-
-#include <mbus.frigg_pb.hpp>
-#include <hw.frigg_bragi.hpp>
 
 namespace thor {
 
@@ -23,21 +21,21 @@ constexpr size_t fontWidth = 8;
 
 struct FbDisplay final : TextDisplay {
 	FbDisplay(void *ptr, unsigned int width, unsigned int height, size_t pitch)
-	: _width{width}, _height{height}, _pitch{pitch / sizeof(uint32_t)} {
+	: _width {width}
+	, _height {height}
+	, _pitch {pitch / sizeof(uint32_t)} {
 		assert(!(pitch % sizeof(uint32_t)));
 		setWindow(ptr);
 		_clearScreen(defaultBg);
 	}
 
-	void setWindow(void *ptr) {
-		_window = reinterpret_cast<uint32_t *>(ptr);
-	}
+	void setWindow(void *ptr) { _window = reinterpret_cast<uint32_t *>(ptr); }
 
 	int getWidth() override;
 	int getHeight() override;
-	
-	void setChars(unsigned int x, unsigned int y,
-			const char *c, int count, int fg, int bg) override;
+
+	void
+	setChars(unsigned int x, unsigned int y, const char *c, int count, int fg, int bg) override;
 	void setBlanks(unsigned int x, unsigned int y, int count, int bg) override;
 
 private:
@@ -57,22 +55,31 @@ int FbDisplay::getHeight() {
 	return _height / fontHeight;
 }
 
-void FbDisplay::setChars(unsigned int x, unsigned int y,
-		const char *c, int count, int fg, int bg) {
-	renderChars((void *)_window, _pitch, x, y, c, count, fg, bg,
-			std::integral_constant<int, fontWidth>{},
-			std::integral_constant<int, fontHeight>{});
+void FbDisplay::setChars(unsigned int x, unsigned int y, const char *c, int count, int fg, int bg) {
+	renderChars(
+		(void *) _window,
+		_pitch,
+		x,
+		y,
+		c,
+		count,
+		fg,
+		bg,
+		std::integral_constant<int, fontWidth> {},
+		std::integral_constant<int, fontHeight> {}
+	);
 }
 
 void FbDisplay::setBlanks(unsigned int x, unsigned int y, int count, int bg) {
-	auto bg_rgb = (bg < 0) ? defaultBg : rgbColor[bg]; 
+	auto bg_rgb = (bg < 0) ? defaultBg : rgbColor[bg];
 
 	auto dest_line = _window + y * fontHeight * _pitch + x * fontWidth;
 	for(size_t i = 0; i < fontHeight; i++) {
 		auto dest = dest_line;
 		for(int k = 0; k < count; k++) {
-			for(size_t j = 0; j < fontWidth; j++)
+			for(size_t j = 0; j < fontWidth; j++) {
 				*dest++ = bg_rgb;
+			}
 		}
 		dest_line += _pitch;
 	}
@@ -82,20 +89,28 @@ void FbDisplay::_clearScreen(uint32_t rgb_color) {
 	auto dest_line = _window;
 	for(size_t i = 0; i < _height; i++) {
 		auto dest = dest_line;
-		for(size_t j = 0; j < _width; j++)
+		for(size_t j = 0; j < _width; j++) {
 			*dest++ = rgb_color;
+		}
 		dest_line += _pitch;
 	}
 }
 
 namespace {
-	frg::manual_box<FbInfo> bootInfo;
-	frg::manual_box<FbDisplay> bootDisplay;
-	frg::manual_box<BootScreen> bootScreen;
-}
+frg::manual_box<FbInfo> bootInfo;
+frg::manual_box<FbDisplay> bootDisplay;
+frg::manual_box<BootScreen> bootScreen;
+}  // namespace
 
-void initializeBootFb(uint64_t address, uint64_t pitch, uint64_t width,
-		uint64_t height, uint64_t bpp, uint64_t type, void *early_window) {
+void initializeBootFb(
+	uint64_t address,
+	uint64_t pitch,
+	uint64_t width,
+	uint64_t height,
+	uint64_t bpp,
+	uint64_t type,
+	void *early_window
+) {
 	bootInfo.initialize();
 	auto fb_info = bootInfo.get();
 	fb_info->address = address;
@@ -106,8 +121,7 @@ void initializeBootFb(uint64_t address, uint64_t pitch, uint64_t width,
 	fb_info->type = type;
 
 	// Initialize the framebuffer with a lower-half window.
-	bootDisplay.initialize(early_window,
-			fb_info->width, fb_info->height, fb_info->pitch);
+	bootDisplay.initialize(early_window, fb_info->width, fb_info->height, fb_info->pitch);
 	bootScreen.initialize(bootDisplay.get());
 
 	enableLogHandler(bootScreen.get());
@@ -119,37 +133,48 @@ void transitionBootFb() {
 		return;
 	}
 
-	auto window_size = (bootInfo->height * bootInfo->pitch + (kPageSize - 1)) & ~(kPageSize - 1);
+	auto window_size =
+		(bootInfo->height * bootInfo->pitch + (kPageSize - 1)) & ~(kPageSize - 1);
 	assert(window_size <= 0x1'000'000);
 	auto window = KernelVirtualMemory::global().allocate(0x1'000'000);
-	for(size_t pg = 0; pg < window_size; pg += kPageSize)
-		KernelPageSpace::global().mapSingle4k(VirtualAddr(window) + pg,
-				bootInfo->address + pg, page_access::write, CachingMode::writeCombine);
+	for(size_t pg = 0; pg < window_size; pg += kPageSize) {
+		KernelPageSpace::global().mapSingle4k(
+			VirtualAddr(window) + pg,
+			bootInfo->address + pg,
+			page_access::write,
+			CachingMode::writeCombine
+		);
+	}
 
 	// Transition to the kernel mapping window.
 	bootDisplay->setWindow(window);
 
 	assert(!(bootInfo->address & (kPageSize - 1)));
-	bootInfo->memory = smarter::allocate_shared<HardwareMemory>(*kernelAlloc,
-			bootInfo->address & ~(kPageSize - 1),
-			(bootInfo->height * bootInfo->pitch + (kPageSize - 1)) & ~(kPageSize - 1),
-			CachingMode::writeCombine);
+	bootInfo->memory = smarter::allocate_shared<HardwareMemory>(
+		*kernelAlloc,
+		bootInfo->address & ~(kPageSize - 1),
+		(bootInfo->height * bootInfo->pitch + (kPageSize - 1)) & ~(kPageSize - 1),
+		CachingMode::writeCombine
+	);
 
 	// Try to attached the framebuffer to a PCI device.
 	pci::PciDevice *owner = nullptr;
-	for (auto dev : *pci::allDevices) {
-		auto checkBars = [&] () -> bool {
+	for(auto dev : *pci::allDevices) {
+		auto checkBars = [&]() -> bool {
 			for(int i = 0; i < 6; i++) {
-				if(dev->bars[i].type != pci::PciBar::kBarMemory)
+				if(dev->bars[i].type != pci::PciBar::kBarMemory) {
 					continue;
+				}
 				// TODO: Careful about overflow here.
 				auto bar_begin = dev->bars[i].address;
 				auto bar_end = dev->bars[i].address + dev->bars[i].length;
 				if(bootInfo->address >= bar_begin
-						&& bootInfo->address + bootInfo->height * bootInfo->pitch <= bar_end)
+				   && bootInfo->address + bootInfo->height * bootInfo->pitch
+					      <= bar_end) {
 					return true;
+				}
 			}
-			
+
 			return false;
 		};
 
@@ -159,13 +184,13 @@ void transitionBootFb() {
 		}
 	}
 
-	if(!owner)
+	if(!owner) {
 		panicLogger() << "thor: Could not find owner for boot framebuffer" << frg::endlog;
-	infoLogger() << "thor: Boot framebuffer is attached to PCI device "
-			<< owner->bus << "." << owner->slot << "." << owner->function << frg::endlog;
+	}
+	infoLogger() << "thor: Boot framebuffer is attached to PCI device " << owner->bus << "."
+		     << owner->slot << "." << owner->function << frg::endlog;
 	owner->associatedFrameBuffer = bootInfo.get();
 	owner->associatedScreen = bootScreen.get();
 }
 
-} // namespace thor
-
+}  // namespace thor

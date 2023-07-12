@@ -7,18 +7,18 @@ namespace thor {
 
 constinit PIOLogHandler pioLogHandler;
 
-inline constexpr arch::scalar_register<uint8_t> data(0);
-inline constexpr arch::scalar_register<uint8_t> baudLow(0);
-inline constexpr arch::scalar_register<uint8_t> baudHigh(1);
-inline constexpr arch::bit_register<uint8_t> lineControl(3);
-inline constexpr arch::bit_register<uint8_t> lineStatus(5);
+constexpr inline arch::scalar_register<uint8_t> data(0);
+constexpr inline arch::scalar_register<uint8_t> baudLow(0);
+constexpr inline arch::scalar_register<uint8_t> baudHigh(1);
+constexpr inline arch::bit_register<uint8_t> lineControl(3);
+constexpr inline arch::bit_register<uint8_t> lineStatus(5);
 
-inline constexpr arch::field<uint8_t, bool> txReady(5, 1);
+constexpr inline arch::field<uint8_t, bool> txReady(5, 1);
 
-inline constexpr arch::field<uint8_t, int> dataBits(0, 2);
-inline constexpr arch::field<uint8_t, bool> stopBit(2, 1);
-inline constexpr arch::field<uint8_t, int> parityBits(3, 3);
-inline constexpr arch::field<uint8_t, bool> dlab(7, 1);
+constexpr inline arch::field<uint8_t, int> dataBits(0, 2);
+constexpr inline arch::field<uint8_t, bool> stopBit(2, 1);
+constexpr inline arch::field<uint8_t, int> parityBits(3, 3);
+constexpr inline arch::field<uint8_t, bool> dlab(7, 1);
 
 extern bool debugToSerial;
 extern bool debugToBochs;
@@ -44,7 +44,7 @@ void PIOLogHandler::printChar(char c) {
 		auto base = arch::global_io.subspace(0x3F8);
 
 		serialBuffer[serialBufferIndex++] = val;
-		if (serialBufferIndex == 16) {
+		if(serialBufferIndex == 16) {
 			while(!(base.load(lineStatus) & txReady)) {
 				// do nothing until the UART is ready to transmit.
 			}
@@ -67,4 +67,4 @@ void PIOLogHandler::printChar(char c) {
 	}
 }
 
-} // namespace thor
+}  // namespace thor

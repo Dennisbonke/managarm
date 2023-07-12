@@ -6,4 +6,4 @@ namespace input_subsystem {
 
 async::detached run();
 
-} // namespace input_subsystem
+}  // namespace input_subsystem

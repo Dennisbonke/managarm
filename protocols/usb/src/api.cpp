@@ -5,8 +5,7 @@
 // Device.
 // ----------------------------------------------------------------------------
 
-Device::Device(std::shared_ptr<DeviceData> state)
-: _state(std::move(state)) { }
+Device::Device(std::shared_ptr<DeviceData> state) : _state(std::move(state)) {}
 
 arch::dma_pool *Device::setupPool() const {
 	return _state->setupPool();
@@ -32,11 +31,10 @@ async::result<frg::expected<UsbError>> Device::transfer(ControlTransfer info) co
 // Configuration.
 // ----------------------------------------------------------------------------
 
-Configuration::Configuration(std::shared_ptr<ConfigurationData> state)
-: _state(std::move(state)) { }
+Configuration::Configuration(std::shared_ptr<ConfigurationData> state) : _state(std::move(state)) {}
 
-async::result<frg::expected<UsbError, Interface>> Configuration::useInterface(int number,
-		int alternative) const {
+async::result<frg::expected<UsbError, Interface>>
+Configuration::useInterface(int number, int alternative) const {
 	return _state->useInterface(number, alternative);
 }
 
@@ -44,8 +42,7 @@ async::result<frg::expected<UsbError, Interface>> Configuration::useInterface(in
 // Interface.
 // ----------------------------------------------------------------------------
 
-Interface::Interface(std::shared_ptr<InterfaceData> state)
-: _state(std::move(state)) { }
+Interface::Interface(std::shared_ptr<InterfaceData> state) : _state(std::move(state)) {}
 
 async::result<frg::expected<UsbError, Endpoint>>
 Interface::getEndpoint(PipeType type, int number) const {
@@ -56,8 +53,7 @@ Interface::getEndpoint(PipeType type, int number) const {
 // Endpoint.
 // ----------------------------------------------------------------------------
 
-Endpoint::Endpoint(std::shared_ptr<EndpointData> state)
-: _state(std::move(state)) { }
+Endpoint::Endpoint(std::shared_ptr<EndpointData> state) : _state(std::move(state)) {}
 
 async::result<frg::expected<UsbError, size_t>> Endpoint::transfer(InterruptTransfer info) const {
 	return _state->transfer(info);
@@ -66,4 +62,3 @@ async::result<frg::expected<UsbError, size_t>> Endpoint::transfer(InterruptTrans
 async::result<frg::expected<UsbError, size_t>> Endpoint::transfer(BulkTransfer info) const {
 	return _state->transfer(info);
 }
-

@@ -1,25 +1,30 @@
 #pragma once
 
-#include <iostream>
-#include <set>
-#include <deque>
-#include <unordered_map>
+#include "file.hpp"
 
 #include <async/result.hpp>
 #include <boost/intrusive/rbtree.hpp>
+#include <deque>
+#include <fcntl.h>
 #include <frg/container_of.hpp>
 #include <hel.h>
-
-#include <fcntl.h>
-
-#include "file.hpp"
+#include <iostream>
+#include <set>
+#include <unordered_map>
 
 using DeviceId = std::pair<int, int>;
 
 enum class VfsType {
 	// null means that the file type is undefined in stat().
 	// Avoid using null in favor of a more appropriate type.
-	null, directory, regular, symlink, charDevice, blockDevice, socket, fifo
+	null,
+	directory,
+	regular,
+	symlink,
+	charDevice,
+	blockDevice,
+	socket,
+	fifo
 };
 
 struct FileStats {
@@ -32,7 +37,6 @@ struct FileStats {
 	uint64_t mtimeSecs, mtimeNanos;
 	uint64_t ctimeSecs, ctimeNanos;
 };
-
 
 // Forward declarations.
 struct FsLink;
@@ -63,7 +67,7 @@ public:
 	virtual FutureMaybe<std::shared_ptr<FsNode>> createSocket() = 0;
 
 	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
-			rename(FsLink *source, FsNode *directory, std::string name) = 0;
+	rename(FsLink *source, FsNode *directory, std::string name) = 0;
 };
 
 // ----------------------------------------------------------------------------
@@ -75,10 +79,10 @@ protected:
 	~FsObserver() = default;
 
 public:
-	static constexpr uint32_t deleteEvent = 1;
+	constexpr static uint32_t deleteEvent = 1;
 
-	virtual void observeNotification(uint32_t events,
-			const std::string &name, uint32_t cookie) = 0;
+	virtual void
+	observeNotification(uint32_t events, const std::string &name, uint32_t cookie) = 0;
 };
 
 // ----------------------------------------------------------------------------
@@ -86,25 +90,23 @@ public:
 // ----------------------------------------------------------------------------
 
 using SemanticFlags = uint32_t;
-inline constexpr SemanticFlags semanticNonBlock = 1;
-inline constexpr SemanticFlags semanticRead = 2;
-inline constexpr SemanticFlags semanticWrite = 4;
+constexpr inline SemanticFlags semanticNonBlock = 1;
+constexpr inline SemanticFlags semanticRead = 2;
+constexpr inline SemanticFlags semanticWrite = 4;
 
 // Represents an inode on an actual file system (i.e. not in the VFS).
 struct FsNode {
 	using DefaultOps = uint32_t;
-	static inline constexpr DefaultOps defaultSupportsObservers = 1 << 1;
+	constexpr inline static DefaultOps defaultSupportsObservers = 1 << 1;
 
 	// TODO: Remove this constructor once every FS has a superblock.
-	FsNode(DefaultOps default_ops = 0)
-	: _superblock{nullptr}, _defaultOps{default_ops} { }
+	FsNode(DefaultOps default_ops = 0) : _superblock {nullptr}, _defaultOps {default_ops} {}
 
 	FsNode(FsSuperblock *superblock, DefaultOps default_ops = 0)
-	: _superblock{superblock}, _defaultOps{default_ops} { }
+	: _superblock {superblock}
+	, _defaultOps {default_ops} {}
 
-	FsSuperblock *superblock() {
-		return _superblock;
-	}
+	FsSuperblock *superblock() { return _superblock; }
 
 protected:
 	~FsNode() = default;
@@ -124,25 +126,26 @@ public:
 	virtual void removeObserver(FsObserver *observer);
 
 	//! Resolves a file in a directory (directories only).
-	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>> getLink(std::string name);
+	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
+	getLink(std::string name);
 
 	//! Links an existing node to this directory (directories only).
-	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>> link(std::string name,
-			std::shared_ptr<FsNode> target);
+	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
+	link(std::string name, std::shared_ptr<FsNode> target);
 
 	//! Creates a new directory (directories only).
-	virtual async::result<std::variant<Error, std::shared_ptr<FsLink>>>
-	mkdir(std::string name);
+	virtual async::result<std::variant<Error, std::shared_ptr<FsLink>>> mkdir(std::string name);
 
 	//! Creates a new symlink (directories only).
 	virtual async::result<std::variant<Error, std::shared_ptr<FsLink>>>
 	symlink(std::string name, std::string path);
 
 	//! Creates a new device file (directories only).
-	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>> mkdev(std::string name,
-			VfsType type, DeviceId id);
+	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
+	mkdev(std::string name, VfsType type, DeviceId id);
 
-	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>> mkfifo(std::string name, mode_t mode);
+	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
+	mkfifo(std::string name, mode_t mode);
 
 	virtual async::result<frg::expected<Error>> unlink(std::string name);
 
@@ -151,8 +154,9 @@ public:
 	//! Opens the file (regular files only).
 	// TODO: Move this to the link instead of the inode?
 	virtual async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-	open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			SemanticFlags semantic_flags);
+	open(std::shared_ptr<MountView> mount,
+	     std::shared_ptr<FsLink> link,
+	     SemanticFlags semantic_flags);
 
 	// Reads the target of a symlink (symlinks only).
 	// Returns illegalOperationTarget() by default.
@@ -165,14 +169,17 @@ public:
 	virtual async::result<Error> chmod(int mode);
 
 	// Changes timestamps on a node
-	virtual async::result<Error> utimensat(uint64_t atime_sec, uint64_t atime_nsec, uint64_t mtime_sec, uint64_t mtime_nsec);
+	virtual async::result<Error>
+	utimensat(uint64_t atime_sec, uint64_t atime_nsec, uint64_t mtime_sec, uint64_t mtime_nsec);
 
 	// Creates an socket
-	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>> mksocket(std::string name);
+	virtual async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
+	mksocket(std::string name);
 
 	// Recursive path traversal
 	virtual bool hasTraverseLinks();
-	virtual async::result<frg::expected<Error, std::pair<std::shared_ptr<FsLink>, size_t>>> traverseLinks(std::deque<std::string> path);
+	virtual async::result<frg::expected<Error, std::pair<std::shared_ptr<FsLink>, size_t>>>
+	traverseLinks(std::deque<std::string> path);
 
 protected:
 	void notifyObservers(uint32_t inotifyEvents, const std::string &name, uint32_t cookie);
@@ -191,30 +198,27 @@ private:
 
 // This class can be used to construct FsLinks for anonymous special files
 // such as epoll, signalfd, timerfd, etc.
-struct SpecialLink final : FsLink, std::enable_shared_from_this<SpecialLink> {
+struct SpecialLink final
+: FsLink
+, std::enable_shared_from_this<SpecialLink> {
 private:
-	struct PrivateTag { }; // To tag-dispatch to private methods.
+	struct PrivateTag {};  // To tag-dispatch to private methods.
 
 public:
 	static std::shared_ptr<SpecialLink> makeSpecialLink(VfsType fileType, int mode) {
-		return std::make_shared<SpecialLink>(PrivateTag{}, fileType, mode);
+		return std::make_shared<SpecialLink>(PrivateTag {}, fileType, mode);
 	}
 
-	SpecialLink(PrivateTag, VfsType fileType, int mode)
-	: fileType_{fileType}, mode_{mode} { }
+	SpecialLink(PrivateTag, VfsType fileType, int mode) : fileType_ {fileType}, mode_ {mode} {}
 
 public:
 	std::shared_ptr<FsNode> getTarget() override {
 		return {shared_from_this(), &embeddedNode_};
 	}
 
-	std::shared_ptr<FsNode> getOwner() override {
-		return nullptr;
-	}
+	std::shared_ptr<FsNode> getOwner() override { return nullptr; }
 
-	std::string getName() override {
-		throw std::runtime_error("SpecialLink has no name");
-	}
+	std::string getName() override { throw std::runtime_error("SpecialLink has no name"); }
 
 private:
 	// SpecialLinks can never be linked into "real" file systems,
@@ -227,7 +231,7 @@ private:
 
 		async::result<frg::expected<Error, FileStats>> getStats() override {
 			auto node = frg::container_of(this, &SpecialLink::embeddedNode_);
-			FileStats stats{};
+			FileStats stats {};
 			// TODO: Allocate an inode number.
 			stats.inodeNumber = 1;
 			stats.fileSize = 0;

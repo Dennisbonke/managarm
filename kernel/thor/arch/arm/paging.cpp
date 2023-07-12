@@ -1,59 +1,73 @@
-#include <thor-internal/arch/paging.hpp>
-#include <thor-internal/arch/ints.hpp>
 #include <arch/variable.hpp>
-#include <thor-internal/physical.hpp>
+#include <thor-internal/arch/ints.hpp>
+#include <thor-internal/arch/paging.hpp>
 #include <thor-internal/cpu-data.hpp>
+#include <thor-internal/physical.hpp>
 
 namespace thor {
 
-static inline constexpr uint64_t tlbiValue(uint16_t asid, uint64_t va = 0) {
+constexpr inline static uint64_t tlbiValue(uint16_t asid, uint64_t va = 0) {
 	return (uint64_t(asid) << 48) | (va >> 12);
 }
 
 void invalidatePage(const void *address) {
-	asm volatile ("dsb st;\n\t\
+	asm volatile(
+		"dsb st;\n\t\
 			tlbi vale1, %0;\n\t\
 			dsb sy; isb"
-			:
-			: "r"(tlbiValue(0, reinterpret_cast<uintptr_t>(address)))
-			: "memory");
+		:
+		: "r"(tlbiValue(0, reinterpret_cast<uintptr_t>(address)))
+		: "memory"
+	);
 }
 
 void invalidateAsid(int asid) {
-	asm volatile ("dsb st;\n\t\
+	asm volatile(
+		"dsb st;\n\t\
 			tlbi aside1, %0;\n\t\
 			dsb sy; isb"
-			:
-			: "r"(tlbiValue(asid))
-			: "memory");
+		:
+		: "r"(tlbiValue(asid))
+		: "memory"
+	);
 }
 
 void invalidatePage(int asid, const void *address) {
-	asm volatile ("dsb st;\n\t\
+	asm volatile(
+		"dsb st;\n\t\
 			tlbi vae1, %0;\n\t\
 			dsb sy; isb"
-			:
-			: "r"(tlbiValue(asid, reinterpret_cast<uintptr_t>(address)))
-			: "memory");
+		:
+		: "r"(tlbiValue(asid, reinterpret_cast<uintptr_t>(address)))
+		: "memory"
+	);
 }
 
 // TODO: TLBI ALLE1 is invalid in EL1...
 void invalidateFullTlb() {
-	asm volatile ("dsb st;\n\t\
+	asm volatile(
+		"dsb st;\n\t\
 			tlbi alle1;\n\t\
-			dsb sy; isb"
-			::: "memory");
+			dsb sy; isb" ::
+			: "memory"
+	);
 }
 
-void poisonPhysicalAccess(PhysicalAddr physical) { assert(!"Not implemented"); }
-void poisonPhysicalWriteAccess(PhysicalAddr physical) { assert(!"Not implemented"); }
+void poisonPhysicalAccess(PhysicalAddr physical) {
+	assert(!"Not implemented");
+}
 
-PageContext::PageContext()
-: _nextStamp{1}, _primaryBinding{nullptr} { }
+void poisonPhysicalWriteAccess(PhysicalAddr physical) {
+	assert(!"Not implemented");
+}
+
+PageContext::PageContext() : _nextStamp {1}, _primaryBinding {nullptr} {}
 
 PageBinding::PageBinding()
-: _asid{0}, _boundSpace{nullptr},
-		_primaryStamp{0}, _alreadyShotSequence{0} { }
+: _asid {0}
+, _boundSpace {nullptr}
+, _primaryStamp {0}
+, _alreadyShotSequence {0} {}
 
 bool PageBinding::isPrimary() {
 	assert(!intsAreEnabled());
@@ -69,11 +83,11 @@ void PageBinding::rebind() {
 
 	// Invalidate old TLB contents for this TTBR0's ASID
 	uint64_t old_ttbr0;
-	asm volatile ("mrs %0, ttbr0_el1" : "=r" (old_ttbr0) :: "memory");
+	asm volatile("mrs %0, ttbr0_el1" : "=r"(old_ttbr0)::"memory");
 	invalidateAsid((old_ttbr0 >> 48) & 0xFFFF);
 
 	auto ttbr0 = (uint64_t(_asid) << 48) | _boundSpace->rootTable();
-	asm volatile ("dsb st; msr ttbr0_el1, %0; dsb sy; isb" :: "r" (ttbr0) : "memory");
+	asm volatile("dsb st; msr ttbr0_el1, %0; dsb sy; isb" ::"r"(ttbr0) : "memory");
 
 	_primaryStamp = context->_nextStamp++;
 	context->_primaryBinding = this;
@@ -81,7 +95,8 @@ void PageBinding::rebind() {
 
 void PageBinding::rebind(smarter::shared_ptr<PageSpace> space) {
 	assert(!intsAreEnabled());
-	assert(!_boundSpace || _boundSpace.get() != space.get()); // This would be unnecessary work.
+	assert(!_boundSpace || _boundSpace.get() != space.get()
+	);  // This would be unnecessary work.
 	auto context = &getCpuData()->pageContext;
 
 	auto unbound_space = _boundSpace;
@@ -101,11 +116,11 @@ void PageBinding::rebind(smarter::shared_ptr<PageSpace> space) {
 
 	// Invalidate old TLB contents for this TTBR0's ASID
 	uint64_t old_ttbr0;
-	asm volatile ("mrs %0, ttbr0_el1" : "=r" (old_ttbr0) :: "memory");
+	asm volatile("mrs %0, ttbr0_el1" : "=r"(old_ttbr0)::"memory");
 	invalidateAsid((old_ttbr0 >> 48) & 0xFFFF);
 
 	auto ttbr0 = (uint64_t(_asid) << 48) | _boundSpace->rootTable();
-	asm volatile ("msr ttbr0_el1, %0; isb; dsb sy; isb" :: "r" (ttbr0) : "memory");
+	asm volatile("msr ttbr0_el1, %0; isb; dsb sy; isb" ::"r"(ttbr0) : "memory");
 
 	_primaryStamp = context->_nextStamp++;
 	context->_primaryBinding = this;
@@ -116,9 +131,8 @@ void PageBinding::rebind(smarter::shared_ptr<PageSpace> space) {
 		frg::locate_member<
 			ShootNode,
 			frg::default_list_hook<ShootNode>,
-			&ShootNode::_queueNode
-		>
-	> complete;
+			&ShootNode::_queueNode>>
+		complete;
 
 	if(unbound_space) {
 		auto lock = frg::guard(&unbound_space->_mutex);
@@ -130,15 +144,20 @@ void PageBinding::rebind(smarter::shared_ptr<PageSpace> space) {
 
 				// Signal completion of the shootdown.
 				if(current->_initiatorCpu != getCpuData()) {
-					if(current->_bindingsToShoot.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-						auto it = unbound_space->_shootQueue.iterator_to(current);
+					if(current->_bindingsToShoot
+						   .fetch_sub(1, std::memory_order_acq_rel)
+					   == 1) {
+						auto it = unbound_space->_shootQueue.iterator_to(
+							current
+						);
 						unbound_space->_shootQueue.erase(it);
 						complete.push_front(current);
 					}
 				}
 
-				if(!predecessor)
+				if(!predecessor) {
 					break;
+				}
 				current = predecessor;
 			}
 		}
@@ -159,11 +178,12 @@ void PageBinding::rebind(smarter::shared_ptr<PageSpace> space) {
 void PageBinding::unbind() {
 	assert(!intsAreEnabled());
 
-	if(!_boundSpace)
+	if(!_boundSpace) {
 		return;
+	}
 
 	// Perform shootdown.
-	if (!isPrimary()) {
+	if(!isPrimary()) {
 		// If there was only a single binding, it would have been primary.
 		invalidateAsid(_asid);
 	}
@@ -173,9 +193,8 @@ void PageBinding::unbind() {
 		frg::locate_member<
 			ShootNode,
 			frg::default_list_hook<ShootNode>,
-			&ShootNode::_queueNode
-		>
-	> complete;
+			&ShootNode::_queueNode>>
+		complete;
 
 	{
 		auto lock = frg::guard(&_boundSpace->_mutex);
@@ -188,15 +207,20 @@ void PageBinding::unbind() {
 				// The actual shootdown was done above.
 				// Signal completion of the shootdown.
 				if(current->_initiatorCpu != getCpuData()) {
-					if(current->_bindingsToShoot.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-						auto it = _boundSpace->_shootQueue.iterator_to(current);
+					if(current->_bindingsToShoot
+						   .fetch_sub(1, std::memory_order_acq_rel)
+					   == 1) {
+						auto it =
+							_boundSpace->_shootQueue.iterator_to(current
+							);
 						_boundSpace->_shootQueue.erase(it);
 						complete.push_front(current);
 					}
 				}
 
-				if(!predecessor)
+				if(!predecessor) {
 					break;
+				}
 				current = predecessor;
 			}
 		}
@@ -220,8 +244,9 @@ void PageBinding::unbind() {
 void PageBinding::shootdown() {
 	assert(!intsAreEnabled());
 
-	if(!_boundSpace)
+	if(!_boundSpace) {
 		return;
+	}
 
 	// If we retire the space anyway, just flush the whole ASID.
 	if(_boundSpace->_wantToRetire.load(std::memory_order_acquire)) {
@@ -234,9 +259,8 @@ void PageBinding::shootdown() {
 		frg::locate_member<
 			ShootNode,
 			frg::default_list_hook<ShootNode>,
-			&ShootNode::_queueNode
-		>
-	> complete;
+			&ShootNode::_queueNode>>
+		complete;
 
 	uint64_t target_seq;
 	{
@@ -249,19 +273,30 @@ void PageBinding::shootdown() {
 
 				if(current->_initiatorCpu != getCpuData()) {
 					// Perform the actual shootdown.
-					for(size_t pg = 0; pg < current->size; pg += kPageSize)
-						invalidatePage(_asid, reinterpret_cast<void *>(current->address + pg));
+					for(size_t pg = 0; pg < current->size; pg += kPageSize) {
+						invalidatePage(
+							_asid,
+							reinterpret_cast<void *>(
+								current->address + pg
+							)
+						);
+					}
 
 					// Signal completion of the shootdown.
-					if(current->_bindingsToShoot.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-						auto it = _boundSpace->_shootQueue.iterator_to(current);
+					if(current->_bindingsToShoot
+						   .fetch_sub(1, std::memory_order_acq_rel)
+					   == 1) {
+						auto it =
+							_boundSpace->_shootQueue.iterator_to(current
+							);
 						_boundSpace->_shootQueue.erase(it);
 						complete.push_front(current);
 					}
 				}
 
-				if(!predecessor)
+				if(!predecessor) {
 					break;
+				}
 				current = predecessor;
 			}
 		}
@@ -276,8 +311,7 @@ void PageBinding::shootdown() {
 	}
 }
 
-GlobalPageBinding::GlobalPageBinding()
-: _alreadyShotSequence{0} { }
+GlobalPageBinding::GlobalPageBinding() : _alreadyShotSequence {0} {}
 
 void GlobalPageBinding::bind() {
 	assert(!intsAreEnabled());
@@ -305,9 +339,8 @@ void GlobalPageBinding::shootdown() {
 		frg::locate_member<
 			ShootNode,
 			frg::default_list_hook<ShootNode>,
-			&ShootNode::_queueNode
-		>
-	> complete;
+			&ShootNode::_queueNode>>
+		complete;
 
 	uint64_t targetSeq;
 	{
@@ -320,19 +353,25 @@ void GlobalPageBinding::shootdown() {
 
 				if(current->_initiatorCpu != getCpuData()) {
 					// Perform the actual shootdown.
-					for(size_t pg = 0; pg < current->size; pg += kPageSize)
-						invalidatePage(reinterpret_cast<void *>(current->address + pg));
+					for(size_t pg = 0; pg < current->size; pg += kPageSize) {
+						invalidatePage(reinterpret_cast<void *>(
+							current->address + pg
+						));
+					}
 
 					// Signal completion of the shootdown.
-					if(current->_bindingsToShoot.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+					if(current->_bindingsToShoot
+						   .fetch_sub(1, std::memory_order_acq_rel)
+					   == 1) {
 						auto it = space->_shootQueue.iterator_to(current);
 						space->_shootQueue.erase(it);
 						complete.push_front(current);
 					}
 				}
 
-				if(!predecessor)
+				if(!predecessor) {
 					break;
+				}
 				current = predecessor;
 			}
 		}
@@ -355,21 +394,25 @@ void PageSpace::activate(smarter::shared_ptr<PageSpace> space) {
 		// If the space is currently bound, always keep that binding.
 		auto bound = bindings[i].boundSpace();
 		if(bound && bound.get() == space.get()) {
-			if(!bindings[i].isPrimary())
+			if(!bindings[i].isPrimary()) {
 				bindings[i].rebind();
+			}
 			return;
 		}
 
 		// Otherwise, prefer the LRU binding.
-		if(bindings[i].primaryStamp() < bindings[k].primaryStamp())
+		if(bindings[i].primaryStamp() < bindings[k].primaryStamp()) {
 			k = i;
+		}
 	}
 
 	bindings[k].rebind(space);
 }
 
 PageSpace::PageSpace(PhysicalAddr root_table)
-: _rootTable{root_table}, _numBindings{0}, _shootSequence{0} { }
+: _rootTable {root_table}
+, _numBindings {0}
+, _shootSequence {0} {}
 
 PageSpace::~PageSpace() {
 	assert(!_numBindings);
@@ -388,8 +431,9 @@ void PageSpace::retire(RetireNode *node) {
 		}
 	}
 
-	if(!any_bindings)
+	if(!any_bindings) {
 		node->complete();
+	}
 
 	sendShootdownIpi();
 }
@@ -407,18 +451,23 @@ bool PageSpace::submitShootdown(ShootNode *node) {
 		// Perform synchronous shootdown.
 		auto bindings = getCpuData()->asidBindings;
 		for(int i = 0; i < maxAsid; i++) {
-			if(bindings[i].boundSpace().get() != this)
+			if(bindings[i].boundSpace().get() != this) {
 				continue;
+			}
 			assert(unshot_bindings);
 
-			for(size_t pg = 0; pg < node->size; pg += kPageSize)
-				invalidatePage(bindings[i].getAsid(),
-						reinterpret_cast<void *>(node->address + pg));
+			for(size_t pg = 0; pg < node->size; pg += kPageSize) {
+				invalidatePage(
+					bindings[i].getAsid(),
+					reinterpret_cast<void *>(node->address + pg)
+				);
+			}
 			unshot_bindings--;
 		}
 
-		if(!unshot_bindings)
+		if(!unshot_bindings) {
 			return true;
+		}
 
 		node->_initiatorCpu = getCpuData();
 		node->_sequence = ++_shootSequence;
@@ -434,7 +483,7 @@ frg::manual_box<KernelPageSpace> kernelSpaceSingleton;
 
 void KernelPageSpace::initialize() {
 	PhysicalAddr ttbr1_ptr;
-	asm volatile ("mrs %0, ttbr1_el1" : "=r" (ttbr1_ptr));
+	asm volatile("mrs %0, ttbr1_el1" : "=r"(ttbr1_ptr));
 
 	kernelSpaceSingleton.initialize(ttbr1_ptr);
 }
@@ -443,8 +492,7 @@ KernelPageSpace &KernelPageSpace::global() {
 	return *kernelSpaceSingleton;
 }
 
-KernelPageSpace::KernelPageSpace(PhysicalAddr ttbr1_ptr)
-:ttbr1_{ttbr1_ptr} { }
+KernelPageSpace::KernelPageSpace(PhysicalAddr ttbr1_ptr) : ttbr1_ {ttbr1_ptr} {}
 
 bool KernelPageSpace::submitShootdown(ShootNode *node) {
 	assert(!(node->address & (kPageSize - 1)));
@@ -458,12 +506,14 @@ bool KernelPageSpace::submitShootdown(ShootNode *node) {
 
 		// Perform synchronous shootdown.
 		assert(unshotBindings);
-		for(size_t pg = 0; pg < node->size; pg += kPageSize)
+		for(size_t pg = 0; pg < node->size; pg += kPageSize) {
 			invalidatePage(reinterpret_cast<void *>(node->address + pg));
+		}
 		unshotBindings--;
 
-		if(!unshotBindings)
+		if(!unshotBindings) {
 			return true;
+		}
 
 		node->_initiatorCpu = getCpuData();
 		node->_sequence = ++_shootSequence;
@@ -475,27 +525,31 @@ bool KernelPageSpace::submitShootdown(ShootNode *node) {
 	return false;
 }
 
-static inline constexpr uint64_t kPageValid = 1;
-static inline constexpr uint64_t kPageTable = (1 << 1);
-static inline constexpr uint64_t kPageL3Page = (1 << 1);
-static inline constexpr uint64_t kPageXN = (uint64_t(1) << 54);
-static inline constexpr uint64_t kPagePXN = (uint64_t(1) << 53);
-static inline constexpr uint64_t kPageShouldBeWritable = (uint64_t(1) << 55);
-static inline constexpr uint64_t kPageNotGlobal = (1 << 11);
-static inline constexpr uint64_t kPageAccess = (1 << 10);
-static inline constexpr uint64_t kPageRO = (1 << 7);
-static inline constexpr uint64_t kPageUser = (1 << 6);
-static inline constexpr uint64_t kPageInnerSh = (3 << 8);
-static inline constexpr uint64_t kPageOuterSh = (2 << 8);
-static inline constexpr uint64_t kPageWb = (0 << 2);
-static inline constexpr uint64_t kPageGRE = (1 << 2);
-static inline constexpr uint64_t kPagenGnRnE = (2 << 2);
-static inline constexpr uint64_t kPagenGnRE = (3 << 2);
-static inline constexpr uint64_t kPageUc = (4 << 2);
-static inline constexpr uint64_t kPageAddress = 0xFFFFFFFFF000;
+constexpr inline static uint64_t kPageValid = 1;
+constexpr inline static uint64_t kPageTable = (1 << 1);
+constexpr inline static uint64_t kPageL3Page = (1 << 1);
+constexpr inline static uint64_t kPageXN = (uint64_t(1) << 54);
+constexpr inline static uint64_t kPagePXN = (uint64_t(1) << 53);
+constexpr inline static uint64_t kPageShouldBeWritable = (uint64_t(1) << 55);
+constexpr inline static uint64_t kPageNotGlobal = (1 << 11);
+constexpr inline static uint64_t kPageAccess = (1 << 10);
+constexpr inline static uint64_t kPageRO = (1 << 7);
+constexpr inline static uint64_t kPageUser = (1 << 6);
+constexpr inline static uint64_t kPageInnerSh = (3 << 8);
+constexpr inline static uint64_t kPageOuterSh = (2 << 8);
+constexpr inline static uint64_t kPageWb = (0 << 2);
+constexpr inline static uint64_t kPageGRE = (1 << 2);
+constexpr inline static uint64_t kPagenGnRnE = (2 << 2);
+constexpr inline static uint64_t kPagenGnRE = (3 << 2);
+constexpr inline static uint64_t kPageUc = (4 << 2);
+constexpr inline static uint64_t kPageAddress = 0xFFFFFFFFF000;
 
-void KernelPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
-		uint32_t flags, CachingMode caching_mode) {
+void KernelPageSpace::mapSingle4k(
+	VirtualAddr pointer,
+	PhysicalAddr physical,
+	uint32_t flags,
+	CachingMode caching_mode
+) {
 	assert((pointer % 0x1000) == 0);
 	assert((physical % 0x1000) == 0);
 
@@ -512,57 +566,57 @@ void KernelPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
 	auto l2 = (pointer >> 21) & 0x1FF;
 	auto l3 = (pointer >> 12) & 0x1FF;
 
-	uint64_t *l0_ptr = (uint64_t *)region.access(rootTable() & 0xFFFFFFFFFFFE);
+	uint64_t *l0_ptr = (uint64_t *) region.access(rootTable() & 0xFFFFFFFFFFFE);
 	uint64_t *l1_ptr = nullptr;
 	uint64_t *l2_ptr = nullptr;
 	uint64_t *l3_ptr = nullptr;
 
 	auto l0_ent = l0_ptr[l0];
-	if (!(l0_ent & kPageValid)) {
+	if(!(l0_ent & kPageValid)) {
 		PhysicalAddr page = physicalAllocator->allocate(kPageSize);
 		assert(page != static_cast<PhysicalAddr>(-1) && "OOM");
 
-		l1_ptr = (uint64_t *)region.access(page);
+		l1_ptr = (uint64_t *) region.access(page);
 
-		for(int i = 0; i < 512; i++)
+		for(int i = 0; i < 512; i++) {
 			l1_ptr[i] = 0;
+		}
 
-		l0_ptr[l0] =
-			page | kPageValid | kPageTable;
+		l0_ptr[l0] = page | kPageValid | kPageTable;
 	} else {
-		l1_ptr = (uint64_t *)region.access(l0_ent & 0xFFFFFFFFF000);
+		l1_ptr = (uint64_t *) region.access(l0_ent & 0xFFFFFFFFF000);
 	}
 
 	auto l1_ent = l1_ptr[l1];
-	if (!(l1_ent & kPageValid)) {
+	if(!(l1_ent & kPageValid)) {
 		PhysicalAddr page = physicalAllocator->allocate(kPageSize);
 		assert(page != static_cast<PhysicalAddr>(-1) && "OOM");
 
-		l2_ptr = (uint64_t *)region.access(page);
+		l2_ptr = (uint64_t *) region.access(page);
 
-		for(int i = 0; i < 512; i++)
+		for(int i = 0; i < 512; i++) {
 			l2_ptr[i] = 0;
+		}
 
-		l1_ptr[l1] =
-			page | kPageValid | kPageTable;
+		l1_ptr[l1] = page | kPageValid | kPageTable;
 	} else {
-		l2_ptr = (uint64_t *)region.access(l1_ent & 0xFFFFFFFFF000);
+		l2_ptr = (uint64_t *) region.access(l1_ent & 0xFFFFFFFFF000);
 	}
 
 	auto l2_ent = l2_ptr[l2];
-	if (!(l2_ent & kPageValid)) {
+	if(!(l2_ent & kPageValid)) {
 		PhysicalAddr page = physicalAllocator->allocate(kPageSize);
 		assert(page != static_cast<PhysicalAddr>(-1) && "OOM");
 
-		l3_ptr = (uint64_t *)region.access(page);
+		l3_ptr = (uint64_t *) region.access(page);
 
-		for(int i = 0; i < 512; i++)
+		for(int i = 0; i < 512; i++) {
 			l3_ptr[i] = 0;
+		}
 
-		l2_ptr[l2] =
-			page | kPageValid | kPageTable;
+		l2_ptr[l2] = page | kPageValid | kPageTable;
 	} else {
-		l3_ptr = (uint64_t *)region.access(l2_ent & 0xFFFFFFFFF000);
+		l3_ptr = (uint64_t *) region.access(l2_ent & 0xFFFFFFFFF000);
 	}
 
 	auto l3_ent = l3_ptr[l3];
@@ -571,20 +625,22 @@ void KernelPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
 
 	uint64_t new_entry = physical | kPageValid | kPageL3Page | kPageAccess;
 
-	if (!(flags & page_access::write))
+	if(!(flags & page_access::write)) {
 		new_entry |= kPageRO;
-	if (!(flags & page_access::execute))
+	}
+	if(!(flags & page_access::execute)) {
 		new_entry |= kPageXN | kPagePXN;
+	}
 
-	if (caching_mode == CachingMode::writeCombine)
+	if(caching_mode == CachingMode::writeCombine) {
 		new_entry |= kPageUc | kPageOuterSh;
-	else if (caching_mode == CachingMode::uncached)
+	} else if(caching_mode == CachingMode::uncached) {
 		new_entry |= kPagenGnRnE | kPageOuterSh;
-	else if (caching_mode == CachingMode::mmio)
+	} else if(caching_mode == CachingMode::mmio) {
 		new_entry |= kPagenGnRE | kPageOuterSh;
-	else if (caching_mode == CachingMode::mmioNonPosted)
+	} else if(caching_mode == CachingMode::mmioNonPosted) {
 		new_entry |= kPagenGnRnE | kPageOuterSh;
-	else {
+	} else {
 		assert(caching_mode == CachingMode::null || caching_mode == CachingMode::writeBack);
 		new_entry |= kPageWb | kPageInnerSh;
 	}
@@ -610,19 +666,19 @@ PhysicalAddr KernelPageSpace::unmapSingle4k(VirtualAddr pointer) {
 	auto l2 = (pointer >> 21) & 0x1FF;
 	auto l3 = (pointer >> 12) & 0x1FF;
 
-	uint64_t *l0_ptr = (uint64_t *)region.access(rootTable() & 0xFFFFFFFFFFFE);
+	uint64_t *l0_ptr = (uint64_t *) region.access(rootTable() & 0xFFFFFFFFFFFE);
 	auto l0_ent = l0_ptr[l0];
 	assert(l0_ent & kPageValid);
 
-	uint64_t *l1_ptr = (uint64_t *)region.access(l0_ent & 0xFFFFFFFFF000);
+	uint64_t *l1_ptr = (uint64_t *) region.access(l0_ent & 0xFFFFFFFFF000);
 	auto l1_ent = l1_ptr[l1];
 	assert(l1_ent & kPageValid);
 
-	uint64_t *l2_ptr = (uint64_t *)region.access(l1_ent & 0xFFFFFFFFF000);
+	uint64_t *l2_ptr = (uint64_t *) region.access(l1_ent & 0xFFFFFFFFF000);
 	auto l2_ent = l2_ptr[l2];
 	assert(l2_ent & kPageValid);
 
-	uint64_t *l3_ptr = (uint64_t *)region.access(l2_ent & 0xFFFFFFFFF000);
+	uint64_t *l3_ptr = (uint64_t *) region.access(l2_ent & 0xFFFFFFFFF000);
 	auto l3_ent = l3_ptr[l3];
 	assert(l3_ent & kPageValid);
 
@@ -631,60 +687,83 @@ PhysicalAddr KernelPageSpace::unmapSingle4k(VirtualAddr pointer) {
 	return l3_ent & 0xFFFFFFFFF000;
 }
 
-ClientPageSpace::Walk::Walk(ClientPageSpace *space) { assert(!"Not implemented"); }
-ClientPageSpace::Walk::~Walk() { assert(!"Not implemented"); }
-void ClientPageSpace::Walk::walkTo(uintptr_t address) { assert(!"Not implemented"); }
-PageFlags ClientPageSpace::Walk::peekFlags() { assert(!"Not implemented"); return 0; }
-PhysicalAddr ClientPageSpace::Walk::peekPhysical() { assert(!"Not implemented"); return 0; }
+ClientPageSpace::Walk::Walk(ClientPageSpace *space) {
+	assert(!"Not implemented");
+}
 
-ClientPageSpace::ClientPageSpace()
-: PageSpace{physicalAllocator->allocate(kPageSize)} {
+ClientPageSpace::Walk::~Walk() {
+	assert(!"Not implemented");
+}
+
+void ClientPageSpace::Walk::walkTo(uintptr_t address) {
+	assert(!"Not implemented");
+}
+
+PageFlags ClientPageSpace::Walk::peekFlags() {
+	assert(!"Not implemented");
+	return 0;
+}
+
+PhysicalAddr ClientPageSpace::Walk::peekPhysical() {
+	assert(!"Not implemented");
+	return 0;
+}
+
+ClientPageSpace::ClientPageSpace() : PageSpace {physicalAllocator->allocate(kPageSize)} {
 	assert(rootTable() != PhysicalAddr(-1) && "OOM");
 
 	PageAccessor accessor;
-	accessor = PageAccessor{rootTable()};
+	accessor = PageAccessor {rootTable()};
 	auto l0 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor.get());
 
-	for(size_t i = 0; i < 512; i++)
+	for(size_t i = 0; i < 512; i++) {
 		l0[i].store(0);
+	}
 }
 
 ClientPageSpace::~ClientPageSpace() {
-	auto clearLevel2 = [&] (PhysicalAddr ps) {
-		PageAccessor accessor{ps};
+	auto clearLevel2 = [&](PhysicalAddr ps) {
+		PageAccessor accessor {ps};
 		auto tbl = reinterpret_cast<uint64_t *>(accessor.get());
 		for(int i = 0; i < 512; i++) {
-			if(tbl[i] & kPageValid)
+			if(tbl[i] & kPageValid) {
 				physicalAllocator->free(tbl[i] & kPageAddress, kPageSize);
+			}
 		}
 	};
 
-	auto clearLevel1 = [&] (PhysicalAddr ps) {
-		PageAccessor accessor{ps};
+	auto clearLevel1 = [&](PhysicalAddr ps) {
+		PageAccessor accessor {ps};
 		auto tbl = reinterpret_cast<uint64_t *>(accessor.get());
 		for(int i = 0; i < 512; i++) {
-			if(!(tbl[i] & kPageValid))
+			if(!(tbl[i] & kPageValid)) {
 				continue;
+			}
 			clearLevel2(tbl[i] & kPageAddress);
 			physicalAllocator->free(tbl[i] & kPageAddress, kPageSize);
 		}
 	};
 
-	PageAccessor root_accessor{rootTable()};
+	PageAccessor root_accessor {rootTable()};
 	auto root_tbl = reinterpret_cast<uint64_t *>(root_accessor.get());
 	for(int i = 0; i < 512; i++) {
-		if(!(root_tbl[i] & kPageValid))
+		if(!(root_tbl[i] & kPageValid)) {
 			continue;
+		}
 		clearLevel1(root_tbl[i] & kPageAddress);
 		physicalAllocator->free(root_tbl[i] & kPageAddress, kPageSize);
 	}
 
 	physicalAllocator->free(rootTable(), kPageSize);
-
 }
 
-void ClientPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical, bool user_page,
-		uint32_t flags, CachingMode caching_mode) {
+void ClientPageSpace::mapSingle4k(
+	VirtualAddr pointer,
+	PhysicalAddr physical,
+	bool user_page,
+	uint32_t flags,
+	CachingMode caching_mode
+) {
 	assert(!(pointer & (kPageSize - 1)));
 
 	auto irq_lock = frg::guard(&irqMutex());
@@ -700,20 +779,20 @@ void ClientPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical, bo
 	arch::scalar_variable<uint64_t> *tbl2;
 	arch::scalar_variable<uint64_t> *tbl3;
 
-	auto index0 = (int)((pointer >> 39) & 0x1FF);
-	auto index1 = (int)((pointer >> 30) & 0x1FF);
-	auto index2 = (int)((pointer >> 21) & 0x1FF);
-	auto index3 = (int)((pointer >> 12) & 0x1FF);
+	auto index0 = (int) ((pointer >> 39) & 0x1FF);
+	auto index1 = (int) ((pointer >> 30) & 0x1FF);
+	auto index2 = (int) ((pointer >> 21) & 0x1FF);
+	auto index3 = (int) ((pointer >> 12) & 0x1FF);
 
-	accessor0 = PageAccessor{rootTable()};
+	accessor0 = PageAccessor {rootTable()};
 	tbl0 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor0.get());
 
-	if (tbl0[index0].load() & kPageValid) {
-		accessor1 = PageAccessor{tbl0[index0].load() & kPageAddress};
+	if(tbl0[index0].load() & kPageValid) {
+		accessor1 = PageAccessor {tbl0[index0].load() & kPageAddress};
 	} else {
 		auto tbl_address = physicalAllocator->allocate(kPageSize);
 		assert(tbl_address != PhysicalAddr(-1) && "OOM");
-		accessor1 = PageAccessor{tbl_address};
+		accessor1 = PageAccessor {tbl_address};
 		memset(accessor1.get(), 0, kPageSize);
 
 		uint64_t new_entry = tbl_address | kPageValid | kPageTable;
@@ -721,12 +800,12 @@ void ClientPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical, bo
 	}
 	tbl1 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor1.get());
 
-	if (tbl1[index1].load() & kPageValid) {
-		accessor2 = PageAccessor{tbl1[index1].load() & kPageAddress};
+	if(tbl1[index1].load() & kPageValid) {
+		accessor2 = PageAccessor {tbl1[index1].load() & kPageAddress};
 	} else {
 		auto tbl_address = physicalAllocator->allocate(kPageSize);
 		assert(tbl_address != PhysicalAddr(-1) && "OOM");
-		accessor2 = PageAccessor{tbl_address};
+		accessor2 = PageAccessor {tbl_address};
 		memset(accessor2.get(), 0, kPageSize);
 
 		uint64_t new_entry = tbl_address | kPageValid | kPageTable;
@@ -734,12 +813,12 @@ void ClientPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical, bo
 	}
 	tbl2 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor2.get());
 
-	if (tbl2[index2].load() & kPageValid) {
-		accessor3 = PageAccessor{tbl2[index2].load() & kPageAddress};
+	if(tbl2[index2].load() & kPageValid) {
+		accessor3 = PageAccessor {tbl2[index2].load() & kPageAddress};
 	} else {
 		auto tbl_address = physicalAllocator->allocate(kPageSize);
 		assert(tbl_address != PhysicalAddr(-1) && "OOM");
-		accessor3 = PageAccessor{tbl_address};
+		accessor3 = PageAccessor {tbl_address};
 		memset(accessor3.get(), 0, kPageSize);
 
 		uint64_t new_entry = tbl_address | kPageValid | kPageTable;
@@ -747,23 +826,27 @@ void ClientPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical, bo
 	}
 	tbl3 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor3.get());
 
-	uint64_t new_entry = physical | kPageValid | kPageL3Page | kPageAccess | kPageRO | kPageNotGlobal;
+	uint64_t new_entry =
+		physical | kPageValid | kPageL3Page | kPageAccess | kPageRO | kPageNotGlobal;
 
-	if (flags & page_access::write)
+	if(flags & page_access::write) {
 		new_entry |= kPageShouldBeWritable;
-	if (!(flags & page_access::execute))
+	}
+	if(!(flags & page_access::execute)) {
 		new_entry |= kPageXN | kPagePXN;
-	if (user_page)
+	}
+	if(user_page) {
 		new_entry |= kPageUser;
-	if (caching_mode == CachingMode::writeCombine)
+	}
+	if(caching_mode == CachingMode::writeCombine) {
 		new_entry |= kPageUc | kPageOuterSh;
-	else if (caching_mode == CachingMode::uncached)
+	} else if(caching_mode == CachingMode::uncached) {
 		new_entry |= kPagenGnRnE | kPageOuterSh;
-	else if (caching_mode == CachingMode::mmio)
+	} else if(caching_mode == CachingMode::mmio) {
 		new_entry |= kPagenGnRE | kPageOuterSh;
-	else if (caching_mode == CachingMode::mmioNonPosted)
+	} else if(caching_mode == CachingMode::mmioNonPosted) {
 		new_entry |= kPagenGnRnE | kPageOuterSh;
-	else {
+	} else {
 		assert(caching_mode == CachingMode::null || caching_mode == CachingMode::writeBack);
 		new_entry |= kPageWb | kPageInnerSh;
 	}
@@ -787,42 +870,44 @@ PageStatus ClientPageSpace::unmapSingle4k(VirtualAddr pointer) {
 	arch::scalar_variable<uint64_t> *tbl2;
 	arch::scalar_variable<uint64_t> *tbl3;
 
-	auto index0 = (int)((pointer >> 39) & 0x1FF);
-	auto index1 = (int)((pointer >> 30) & 0x1FF);
-	auto index2 = (int)((pointer >> 21) & 0x1FF);
-	auto index3 = (int)((pointer >> 12) & 0x1FF);
+	auto index0 = (int) ((pointer >> 39) & 0x1FF);
+	auto index1 = (int) ((pointer >> 30) & 0x1FF);
+	auto index2 = (int) ((pointer >> 21) & 0x1FF);
+	auto index3 = (int) ((pointer >> 12) & 0x1FF);
 
-	accessor0 = PageAccessor{rootTable()};
+	accessor0 = PageAccessor {rootTable()};
 	tbl0 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor0.get());
 
-	if (tbl0[index0].load() & kPageValid) {
-		accessor1 = PageAccessor{tbl0[index0].load() & kPageAddress};
+	if(tbl0[index0].load() & kPageValid) {
+		accessor1 = PageAccessor {tbl0[index0].load() & kPageAddress};
 		tbl1 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor1.get());
 	} else {
 		return 0;
 	}
 
-	if (tbl1[index1].load() & kPageValid) {
-		accessor2 = PageAccessor{tbl1[index1].load() & kPageAddress};
+	if(tbl1[index1].load() & kPageValid) {
+		accessor2 = PageAccessor {tbl1[index1].load() & kPageAddress};
 		tbl2 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor2.get());
 	} else {
 		return 0;
 	}
 
-	if (tbl2[index2].load() & kPageValid) {
-		accessor3 = PageAccessor{tbl2[index2].load() & kPageAddress};
+	if(tbl2[index2].load() & kPageValid) {
+		accessor3 = PageAccessor {tbl2[index2].load() & kPageAddress};
 		tbl3 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor3.get());
 	} else {
 		return 0;
 	}
 
 	auto bits = tbl3[index3].atomic_exchange(0);
-	if (!(bits & kPageValid))
+	if(!(bits & kPageValid)) {
 		return 0;
+	}
 
 	PageStatus ps = page_status::present;
-	if ((bits & kPageShouldBeWritable) && !(bits & kPageRO))
+	if((bits & kPageShouldBeWritable) && !(bits & kPageRO)) {
 		ps |= page_status::dirty;
+	}
 
 	return ps;
 }
@@ -843,41 +928,42 @@ PageStatus ClientPageSpace::cleanSingle4k(VirtualAddr pointer) {
 	arch::scalar_variable<uint64_t> *tbl2;
 	arch::scalar_variable<uint64_t> *tbl3;
 
-	auto index0 = (int)((pointer >> 39) & 0x1FF);
-	auto index1 = (int)((pointer >> 30) & 0x1FF);
-	auto index2 = (int)((pointer >> 21) & 0x1FF);
-	auto index3 = (int)((pointer >> 12) & 0x1FF);
+	auto index0 = (int) ((pointer >> 39) & 0x1FF);
+	auto index1 = (int) ((pointer >> 30) & 0x1FF);
+	auto index2 = (int) ((pointer >> 21) & 0x1FF);
+	auto index3 = (int) ((pointer >> 12) & 0x1FF);
 
-	accessor0 = PageAccessor{rootTable()};
+	accessor0 = PageAccessor {rootTable()};
 	tbl0 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor0.get());
 
-	if (tbl0[index0].load() & kPageValid) {
-		accessor1 = PageAccessor{tbl0[index0].load() & kPageAddress};
+	if(tbl0[index0].load() & kPageValid) {
+		accessor1 = PageAccessor {tbl0[index0].load() & kPageAddress};
 		tbl1 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor1.get());
 	} else {
 		return 0;
 	}
 
-	if (tbl1[index1].load() & kPageValid) {
-		accessor2 = PageAccessor{tbl1[index1].load() & kPageAddress};
+	if(tbl1[index1].load() & kPageValid) {
+		accessor2 = PageAccessor {tbl1[index1].load() & kPageAddress};
 		tbl2 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor2.get());
 	} else {
 		return 0;
 	}
 
-	if (tbl2[index2].load() & kPageValid) {
-		accessor3 = PageAccessor{tbl2[index2].load() & kPageAddress};
+	if(tbl2[index2].load() & kPageValid) {
+		accessor3 = PageAccessor {tbl2[index2].load() & kPageAddress};
 		tbl3 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor3.get());
 	} else {
 		return 0;
 	}
 
 	auto bits = tbl3[index3].load();
-	if (!(bits & kPageValid))
+	if(!(bits & kPageValid)) {
 		return 0;
+	}
 
 	PageStatus ps = page_status::present;
-	if ((bits & kPageShouldBeWritable) && !(bits & kPageRO)) {
+	if((bits & kPageShouldBeWritable) && !(bits & kPageRO)) {
 		ps |= page_status::dirty;
 		tbl3[index3].atomic_exchange(bits & ~kPageRO);
 	}
@@ -903,30 +989,30 @@ bool ClientPageSpace::isMapped(VirtualAddr pointer) {
 	arch::scalar_variable<uint64_t> *tbl2;
 	arch::scalar_variable<uint64_t> *tbl3;
 
-	auto index0 = (int)((pointer >> 39) & 0x1FF);
-	auto index1 = (int)((pointer >> 30) & 0x1FF);
-	auto index2 = (int)((pointer >> 21) & 0x1FF);
-	auto index3 = (int)((pointer >> 12) & 0x1FF);
+	auto index0 = (int) ((pointer >> 39) & 0x1FF);
+	auto index1 = (int) ((pointer >> 30) & 0x1FF);
+	auto index2 = (int) ((pointer >> 21) & 0x1FF);
+	auto index3 = (int) ((pointer >> 12) & 0x1FF);
 
-	accessor0 = PageAccessor{rootTable()};
+	accessor0 = PageAccessor {rootTable()};
 	tbl0 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor0.get());
 
-	if (tbl0[index0].load() & kPageValid) {
-		accessor1 = PageAccessor{tbl0[index0].load() & kPageAddress};
+	if(tbl0[index0].load() & kPageValid) {
+		accessor1 = PageAccessor {tbl0[index0].load() & kPageAddress};
 		tbl1 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor1.get());
 	} else {
 		return false;
 	}
 
-	if (tbl1[index1].load() & kPageValid) {
-		accessor2 = PageAccessor{tbl1[index1].load() & kPageAddress};
+	if(tbl1[index1].load() & kPageValid) {
+		accessor2 = PageAccessor {tbl1[index1].load() & kPageAddress};
 		tbl2 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor2.get());
 	} else {
 		return false;
 	}
 
-	if (tbl2[index2].load() & kPageValid) {
-		accessor3 = PageAccessor{tbl2[index2].load() & kPageAddress};
+	if(tbl2[index2].load() & kPageValid) {
+		accessor3 = PageAccessor {tbl2[index2].load() & kPageAddress};
 		tbl3 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor3.get());
 	} else {
 		return false;
@@ -951,41 +1037,43 @@ bool ClientPageSpace::updatePageAccess(VirtualAddr pointer) {
 	arch::scalar_variable<uint64_t> *tbl2;
 	arch::scalar_variable<uint64_t> *tbl3;
 
-	auto index0 = (int)((pointer >> 39) & 0x1FF);
-	auto index1 = (int)((pointer >> 30) & 0x1FF);
-	auto index2 = (int)((pointer >> 21) & 0x1FF);
-	auto index3 = (int)((pointer >> 12) & 0x1FF);
+	auto index0 = (int) ((pointer >> 39) & 0x1FF);
+	auto index1 = (int) ((pointer >> 30) & 0x1FF);
+	auto index2 = (int) ((pointer >> 21) & 0x1FF);
+	auto index3 = (int) ((pointer >> 12) & 0x1FF);
 
-	accessor0 = PageAccessor{rootTable()};
+	accessor0 = PageAccessor {rootTable()};
 	tbl0 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor0.get());
 
-	if (tbl0[index0].load() & kPageValid) {
-		accessor1 = PageAccessor{tbl0[index0].load() & kPageAddress};
+	if(tbl0[index0].load() & kPageValid) {
+		accessor1 = PageAccessor {tbl0[index0].load() & kPageAddress};
 		tbl1 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor1.get());
 	} else {
 		return false;
 	}
 
-	if (tbl1[index1].load() & kPageValid) {
-		accessor2 = PageAccessor{tbl1[index1].load() & kPageAddress};
+	if(tbl1[index1].load() & kPageValid) {
+		accessor2 = PageAccessor {tbl1[index1].load() & kPageAddress};
 		tbl2 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor2.get());
 	} else {
 		return false;
 	}
 
-	if (tbl2[index2].load() & kPageValid) {
-		accessor3 = PageAccessor{tbl2[index2].load() & kPageAddress};
+	if(tbl2[index2].load() & kPageValid) {
+		accessor3 = PageAccessor {tbl2[index2].load() & kPageAddress};
 		tbl3 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor3.get());
 	} else {
 		return false;
 	}
 
 	auto bits = tbl3[index3].load();
-	if (!(bits & kPageValid))
+	if(!(bits & kPageValid)) {
 		return false;
+	}
 
-	if (!(bits & kPageRO) || !(bits & kPageShouldBeWritable))
+	if(!(bits & kPageRO) || !(bits & kPageShouldBeWritable)) {
 		return false;
+	}
 
 	bits &= ~kPageRO;
 	tbl3[index3].store(bits);
@@ -996,4 +1084,4 @@ bool ClientPageSpace::updatePageAccess(VirtualAddr pointer) {
 	return true;
 }
 
-}
+}  // namespace thor

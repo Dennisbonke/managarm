@@ -1,19 +1,18 @@
-#include <asm/ioctls.h>
-#include <numeric>
-#include <termios.h>
-#include <sys/epoll.h>
-#include <signal.h>
-#include <sstream>
-
-#include <async/recurring-event.hpp>
-#include <bragi/helpers-std.hpp>
+#include "pts.hpp"
 
 #include "file.hpp"
-#include "process.hpp"
-#include "pts.hpp"
 #include "fs.bragi.hpp"
+#include "process.hpp"
 
+#include <asm/ioctls.h>
+#include <async/recurring-event.hpp>
 #include <bitset>
+#include <bragi/helpers-std.hpp>
+#include <numeric>
+#include <signal.h>
+#include <sstream>
+#include <sys/epoll.h>
+#include <termios.h>
 
 namespace pts {
 
@@ -42,8 +41,11 @@ struct Packet {
 
 struct Channel {
 	Channel(int pts_index)
-	: ptsIndex{pts_index}, currentSeq{1}, masterInSeq{0}, slaveInSeq{0} {
-		auto ctrl = [] (char c) -> char { // Convert ^X to X.
+	: ptsIndex {pts_index}
+	, currentSeq {1}
+	, masterInSeq {0}
+	, slaveInSeq {0} {
+		auto ctrl = [](char c) -> char {  // Convert ^X to X.
 			return c - 64;
 		};
 
@@ -61,11 +63,16 @@ struct Channel {
 		activeSettings.c_cc[VSTOP] = ctrl('S');
 		activeSettings.c_cc[VSUSP] = ctrl('Z');
 		activeSettings.c_cc[VQUIT] = ctrl('\\');
-		activeSettings.c_cc[VERASE] = 127; // DEL character.
+		activeSettings.c_cc[VERASE] = 127;  // DEL character.
 		activeSettings.c_cc[VMIN] = 1;
 	}
 
-	async::result<void> commonIoctl(Process *process, uint32_t id, helix_ng::RecvInlineResult msg, helix::UniqueLane conversation);
+	async::result<void> commonIoctl(
+		Process *process,
+		uint32_t id,
+		helix_ng::RecvInlineResult msg,
+		helix::UniqueLane conversation
+	);
 
 	int ptsIndex;
 	ControllingTerminalState cts;
@@ -93,30 +100,25 @@ struct Channel {
 //-----------------------------------------------------------------------------
 
 struct MasterDevice final : UnixDevice {
-	MasterDevice()
-	: UnixDevice(VfsType::charDevice) {
-		assignId({5, 2});
-	}
+	MasterDevice() : UnixDevice(VfsType::charDevice) { assignId({5, 2}); }
 
-	std::string nodePath() override {
-		return "ptmx";
-	}
+	std::string nodePath() override { return "ptmx"; }
 
 	async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-	open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			SemanticFlags semantic_flags) override;
+	open(std::shared_ptr<MountView> mount,
+	     std::shared_ptr<FsLink> link,
+	     SemanticFlags semantic_flags) override;
 };
 
 struct SlaveDevice final : UnixDevice {
 	SlaveDevice(std::shared_ptr<Channel> channel);
 
-	std::string nodePath() override {
-		return std::string{};
-	}
+	std::string nodePath() override { return std::string {}; }
 
 	async::result<frg::expected<Error, SharedFilePtr>>
-	open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			SemanticFlags semantic_flags) override;
+	open(std::shared_ptr<MountView> mount,
+	     std::shared_ptr<FsLink> link,
+	     SemanticFlags semantic_flags) override;
 
 private:
 	std::shared_ptr<Channel> _channel;
@@ -129,12 +131,18 @@ public:
 
 		helix::UniqueLane lane;
 		std::tie(lane, file->_passthrough) = helix::createStream();
-		async::detach(protocols::fs::servePassthrough(std::move(lane),
-				file, &File::fileOperations));
+		async::detach(protocols::fs::servePassthrough(
+			std::move(lane),
+			file,
+			&File::fileOperations
+		));
 	}
 
-	MasterFile(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			bool nonBlocking);
+	MasterFile(
+		std::shared_ptr<MountView> mount,
+		std::shared_ptr<FsLink> link,
+		bool nonBlocking
+	);
 
 	async::result<frg::expected<Error, size_t>>
 	readSome(Process *, void *data, size_t maxLength) override;
@@ -146,36 +154,39 @@ public:
 	getControllingTerminal() override;
 
 	async::result<frg::expected<Error, PollWaitResult>>
-	pollWait(Process *, uint64_t sequence, int mask,
-			async::cancellation_token cancellation) override;
+	pollWait(Process *, uint64_t sequence, int mask, async::cancellation_token cancellation)
+		override;
 
-	async::result<frg::expected<Error, PollStatusResult>>
-	pollStatus(Process *) override;
+	async::result<frg::expected<Error, PollStatusResult>> pollStatus(Process *) override;
 
 	async::result<void>
-	ioctl(Process *process, uint32_t id, helix_ng::RecvInlineResult msg, helix::UniqueLane conversation) override;
+	ioctl(Process *process,
+	      uint32_t id,
+	      helix_ng::RecvInlineResult msg,
+	      helix::UniqueLane conversation) override;
 
 	async::result<void> setFileFlags(int flags) override {
-		if (flags & ~O_NONBLOCK) {
-			std::cout << "posix: setFileFlags on pty \e[1;34m" << structName() << "\e[0m called with unknown flags" << std::endl;
+		if(flags & ~O_NONBLOCK) {
+			std::cout << "posix: setFileFlags on pty \e[1;34m" << structName()
+				  << "\e[0m called with unknown flags" << std::endl;
 			co_return;
 		}
-		if (flags & O_NONBLOCK)
+		if(flags & O_NONBLOCK) {
 			_nonBlocking = true;
-		else
+		} else {
 			_nonBlocking = false;
+		}
 		co_return;
 	}
 
 	async::result<int> getFileFlags() override {
-		if(_nonBlocking)
+		if(_nonBlocking) {
 			co_return O_NONBLOCK;
+		}
 		co_return 0;
 	}
 
-	helix::BorrowedDescriptor getPassthroughLane() override {
-		return _passthrough;
-	}
+	helix::BorrowedDescriptor getPassthroughLane() override { return _passthrough; }
 
 private:
 	helix::UniqueLane _passthrough;
@@ -192,12 +203,19 @@ public:
 
 		helix::UniqueLane lane;
 		std::tie(lane, file->_passthrough) = helix::createStream();
-		async::detach(protocols::fs::servePassthrough(std::move(lane),
-				file, &File::fileOperations));
+		async::detach(protocols::fs::servePassthrough(
+			std::move(lane),
+			file,
+			&File::fileOperations
+		));
 	}
 
-	SlaveFile(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			std::shared_ptr<Channel> channel, bool nonBlock);
+	SlaveFile(
+		std::shared_ptr<MountView> mount,
+		std::shared_ptr<FsLink> link,
+		std::shared_ptr<Channel> channel,
+		bool nonBlock
+	);
 
 	async::result<frg::expected<Error, size_t>>
 	readSome(Process *, void *data, size_t maxLength) override;
@@ -209,21 +227,20 @@ public:
 	getControllingTerminal() override;
 
 	async::result<frg::expected<Error, PollWaitResult>>
-	pollWait(Process *, uint64_t sequence, int mask,
-			async::cancellation_token cancellation) override;
+	pollWait(Process *, uint64_t sequence, int mask, async::cancellation_token cancellation)
+		override;
 
-	async::result<frg::expected<Error, PollStatusResult>>
-	pollStatus(Process *) override;
+	async::result<frg::expected<Error, PollStatusResult>> pollStatus(Process *) override;
 
 	async::result<void>
-	ioctl(Process *process, uint32_t id, helix_ng::RecvInlineResult msg, helix::UniqueLane conversation) override;
+	ioctl(Process *process,
+	      uint32_t id,
+	      helix_ng::RecvInlineResult msg,
+	      helix::UniqueLane conversation) override;
 
-	helix::BorrowedDescriptor getPassthroughLane() override {
-		return _passthrough;
-	}
+	helix::BorrowedDescriptor getPassthroughLane() override { return _passthrough; }
 
-	async::result<frg::expected<Error, std::string>>
-	ttyname() override;
+	async::result<frg::expected<Error, std::string>> ttyname() override;
 
 private:
 	helix::UniqueLane _passthrough;
@@ -240,7 +257,9 @@ private:
 struct Link final : FsLink {
 public:
 	explicit Link(RootNode *root, std::string name, std::shared_ptr<DeviceNode> device)
-	: _root{root}, _name{std::move(name)}, _device{std::move(device)} { }
+	: _root {root}
+	, _name {std::move(name)}
+	, _device {std::move(device)} {}
 
 	std::shared_ptr<FsNode> getOwner() override;
 
@@ -257,9 +276,7 @@ private:
 struct RootLink final : FsLink {
 	RootLink();
 
-	RootNode *rootNode() {
-		return _root.get();
-	}
+	RootNode *rootNode() { return _root.get(); }
 
 	std::shared_ptr<FsNode> getOwner() override {
 		throw std::logic_error("posix: pts RootLink has no owner");
@@ -276,41 +293,38 @@ private:
 };
 
 struct LinkCompare {
-	struct is_transparent { };
+	struct is_transparent {};
 
-	bool operator() (const std::shared_ptr<Link> &link, const std::string &name) const {
+	bool operator()(const std::shared_ptr<Link> &link, const std::string &name) const {
 		return link->getName() < name;
 	}
-	bool operator() (const std::string &name, const std::shared_ptr<Link> &link) const {
+
+	bool operator()(const std::string &name, const std::shared_ptr<Link> &link) const {
 		return name < link->getName();
 	}
 
-	bool operator() (const std::shared_ptr<Link> &a, const std::shared_ptr<Link> &b) const {
+	bool operator()(const std::shared_ptr<Link> &a, const std::shared_ptr<Link> &b) const {
 		return a->getName() < b->getName();
 	}
 };
 
 struct DeviceNode final : FsNode {
 public:
-	DeviceNode(DeviceId id)
-	: _type{VfsType::charDevice}, _id{id} { }
+	DeviceNode(DeviceId id) : _type {VfsType::charDevice}, _id {id} {}
 
-	VfsType getType() override {
-		return _type;
-	}
+	VfsType getType() override { return _type; }
 
 	async::result<frg::expected<Error, FileStats>> getStats() override {
 		std::cout << "\e[31mposix: Fix pts DeviceNode::getStats()\e[39m" << std::endl;
-		co_return FileStats{};
+		co_return FileStats {};
 	}
 
-	DeviceId readDevice() override {
-		return _id;
-	}
+	DeviceId readDevice() override { return _id; }
 
 	async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-	open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			SemanticFlags semantic_flags) override {
+	open(std::shared_ptr<MountView> mount,
+	     std::shared_ptr<FsLink> link,
+	     SemanticFlags semantic_flags) override {
 		return openDevice(_type, _id, std::move(mount), std::move(link), semantic_flags);
 	}
 
@@ -319,14 +333,14 @@ private:
 	DeviceId _id;
 };
 
-struct RootNode final : FsNode, std::enable_shared_from_this<RootNode> {
+struct RootNode final
+: FsNode
+, std::enable_shared_from_this<RootNode> {
 	friend struct Superblock;
 	friend struct DirectoryFile;
 
 public:
-	VfsType getType() override {
-		return VfsType::directory;
-	}
+	VfsType getType() override { return VfsType::directory; }
 
 	void linkDevice(std::string name, std::shared_ptr<DeviceNode> node) {
 		auto link = std::make_shared<Link>(this, name, std::move(node));
@@ -335,23 +349,28 @@ public:
 
 	async::result<frg::expected<Error, FileStats>> getStats() override {
 		std::cout << "\e[31mposix: Fix pts RootNode::getStats()\e[39m" << std::endl;
-		co_return FileStats{};
+		co_return FileStats {};
 	}
 
-	async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
-	getLink(std::string name) override {
+	async::result<frg::expected<Error, std::shared_ptr<FsLink>>> getLink(std::string name
+	) override {
 		auto it = _entries.find(name);
-		if(it != _entries.end())
+		if(it != _entries.end()) {
 			co_return *it;
-		co_return nullptr; // TODO: Return an error code.
+		}
+		co_return nullptr;  // TODO: Return an error code.
 	}
 
 private:
 	std::set<std::shared_ptr<Link>, LinkCompare> _entries;
 };
 
-async::result<void>
-Channel::commonIoctl(Process *process, uint32_t id, helix_ng::RecvInlineResult msg, helix::UniqueLane conversation) {
+async::result<void> Channel::commonIoctl(
+	Process *process,
+	uint32_t id,
+	helix_ng::RecvInlineResult msg,
+	helix::UniqueLane conversation
+) {
 	if(id == managarm::fs::GenericIoctlRequest::message_id) {
 		auto req = bragi::parse_head_only<managarm::fs::GenericIoctlRequest>(msg);
 		assert(req);
@@ -366,11 +385,12 @@ Channel::commonIoctl(Process *process, uint32_t id, helix_ng::RecvInlineResult m
 			auto process = findProcessWithCredentials(extractCreds.credentials());
 
 			managarm::fs::GenericIoctlReply resp;
-			if(auto e = cts.assignSessionOf(process.get()); e == Error::illegalArguments) {
+			if(auto e = cts.assignSessionOf(process.get());
+			   e == Error::illegalArguments) {
 				resp.set_error(managarm::fs::Errors::ILLEGAL_ARGUMENT);
-			}else if(e == Error::insufficientPermissions) {
+			} else if(e == Error::insufficientPermissions) {
 				resp.set_error(managarm::fs::Errors::INSUFFICIENT_PERMISSIONS);
-			}else{
+			} else {
 				assert(e == Error::success);
 				resp.set_error(managarm::fs::Errors::SUCCESS);
 			}
@@ -381,7 +401,7 @@ Channel::commonIoctl(Process *process, uint32_t id, helix_ng::RecvInlineResult m
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(sendResp.error());
-		}else if(req->command() == TIOCGPGRP) {
+		} else if(req->command() == TIOCGPGRP) {
 			managarm::fs::GenericIoctlReply resp;
 
 			auto [extractCreds] = co_await helix_ng::exchangeMsgs(
@@ -395,7 +415,9 @@ Channel::commonIoctl(Process *process, uint32_t id, helix_ng::RecvInlineResult m
 			if(&cts != process->pgPointer()->getSession()->getControllingTerminal()) {
 				resp.set_error(managarm::fs::Errors::NOT_A_TERMINAL);
 			} else {
-				resp.set_pid(cts.getSession()->getForegroundGroup()->getHull()->getPid());
+				resp.set_pid(
+					cts.getSession()->getForegroundGroup()->getHull()->getPid()
+				);
 				resp.set_error(managarm::fs::Errors::SUCCESS);
 			}
 
@@ -405,7 +427,7 @@ Channel::commonIoctl(Process *process, uint32_t id, helix_ng::RecvInlineResult m
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else if(req->command() == TIOCSPGRP) {
+		} else if(req->command() == TIOCSPGRP) {
 			managarm::fs::GenericIoctlReply resp;
 
 			auto [extractCreds] = co_await helix_ng::exchangeMsgs(
@@ -415,13 +437,17 @@ Channel::commonIoctl(Process *process, uint32_t id, helix_ng::RecvInlineResult m
 			HEL_CHECK(extractCreds.error());
 
 			auto process = findProcessWithCredentials(extractCreds.credentials());
-			auto group = process->pgPointer()->getSession()->getProcessGroupById(req->pgid());
+			auto group =
+				process->pgPointer()->getSession()->getProcessGroupById(req->pgid()
+				);
 			if(!group) {
 				resp.set_error(managarm::fs::Errors::ILLEGAL_ARGUMENT);
 			} else {
 				Error ret = cts.getSession()->setForegroundGroup(group.get());
 				if(ret == Error::insufficientPermissions) {
-					resp.set_error(managarm::fs::Errors::INSUFFICIENT_PERMISSIONS);
+					resp.set_error(
+						managarm::fs::Errors::INSUFFICIENT_PERMISSIONS
+					);
 				} else {
 					assert(ret == Error::success);
 					resp.set_error(managarm::fs::Errors::SUCCESS);
@@ -434,7 +460,7 @@ Channel::commonIoctl(Process *process, uint32_t id, helix_ng::RecvInlineResult m
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else if(req->command() == TIOCGSID) {
+		} else if(req->command() == TIOCGSID) {
 			managarm::fs::GenericIoctlReply resp;
 
 			auto [extractCreds] = co_await helix_ng::exchangeMsgs(
@@ -458,13 +484,15 @@ Channel::commonIoctl(Process *process, uint32_t id, helix_ng::RecvInlineResult m
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else{
-			std::cout << "\e[31m" "posix: Rejecting unknown PTS ioctl (commonIoctl) " << req->command()
-					<< "\e[39m" << std::endl;
+		} else {
+			std::cout << "\e[31m"
+				     "posix: Rejecting unknown PTS ioctl (commonIoctl) "
+				  << req->command() << "\e[39m" << std::endl;
 		}
-	}else{
-		std::cout << "\e[31m" "posix: Rejecting unknown PTS ioctl message (commonIoctl) " << id
-				<< "\e[39m" << std::endl;
+	} else {
+		std::cout << "\e[31m"
+			     "posix: Rejecting unknown PTS ioctl message (commonIoctl) "
+			  << id << "\e[39m" << std::endl;
 	}
 }
 
@@ -472,62 +500,80 @@ Channel::commonIoctl(Process *process, uint32_t id, helix_ng::RecvInlineResult m
 // MasterDevice implementation.
 //-----------------------------------------------------------------------------
 
-async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-MasterDevice::open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-		SemanticFlags semantic_flags) {
-	if(semantic_flags & ~(semanticNonBlock | semanticRead | semanticWrite)){
-		std::cout << "\e[31mposix: open() received illegal arguments:"
-				<< std::bitset<32>(semantic_flags)
-				<< "\nOnly semanticNonBlock (0x1), semanticRead (0x2) and semanticWrite(0x4) are allowed.\e[39m"
-				<< std::endl;
+async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>> MasterDevice::open(
+	std::shared_ptr<MountView> mount,
+	std::shared_ptr<FsLink> link,
+	SemanticFlags semantic_flags
+) {
+	if(semantic_flags & ~(semanticNonBlock | semanticRead | semanticWrite)) {
+		std::cout
+			<< "\e[31mposix: open() received illegal arguments:"
+			<< std::bitset<32>(semantic_flags)
+			<< "\nOnly semanticNonBlock (0x1), semanticRead (0x2) and semanticWrite(0x4) are allowed.\e[39m"
+			<< std::endl;
 		co_return Error::illegalArguments;
 	}
 
-	auto file = smarter::make_shared<MasterFile>(std::move(mount), std::move(link),
-			semantic_flags & semanticNonBlock);
+	auto file = smarter::make_shared<MasterFile>(
+		std::move(mount),
+		std::move(link),
+		semantic_flags & semanticNonBlock
+	);
 	file->setupWeakFile(file);
 	MasterFile::serve(file);
 	co_return File::constructHandle(std::move(file));
 }
 
-MasterFile::MasterFile(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-		bool nonBlocking)
-: File{StructName::get("pts.master"), std::move(mount), std::move(link), File::defaultPipeLikeSeek},
-		_channel{std::make_shared<Channel>(nextPtsIndex++)}, _nonBlocking{nonBlocking} {
+MasterFile::MasterFile(
+	std::shared_ptr<MountView> mount,
+	std::shared_ptr<FsLink> link,
+	bool nonBlocking
+)
+: File {StructName::get("pts.master"), std::move(mount), std::move(link), File::defaultPipeLikeSeek}
+, _channel {std::make_shared<Channel>(nextPtsIndex++)}
+, _nonBlocking {nonBlocking} {
 	auto slave_device = std::make_shared<SlaveDevice>(_channel);
 	charRegistry.install(std::move(slave_device));
 
-	globalRootLink->rootNode()->linkDevice(std::to_string(_channel->ptsIndex),
-			std::make_shared<DeviceNode>(DeviceId{136, _channel->ptsIndex}));
+	globalRootLink->rootNode()->linkDevice(
+		std::to_string(_channel->ptsIndex),
+		std::make_shared<DeviceNode>(DeviceId {136, _channel->ptsIndex})
+	);
 }
 
 async::result<frg::expected<Error, size_t>>
 MasterFile::readSome(Process *, void *data, size_t maxLength) {
-	if(logReadWrite)
+	if(logReadWrite) {
 		std::cout << "posix: Read from tty " << structName() << std::endl;
-	if(!maxLength)
+	}
+	if(!maxLength) {
 		co_return 0;
+	}
 
-	if (_channel->masterQueue.empty() && _nonBlocking)
+	if(_channel->masterQueue.empty() && _nonBlocking) {
 		co_return Error::wouldBlock;
+	}
 
-	while(_channel->masterQueue.empty())
+	while(_channel->masterQueue.empty()) {
 		co_await _channel->statusBell.async_wait();
+	}
 
 	auto packet = &_channel->masterQueue.front();
 	size_t chunk = std::min(packet->buffer.size() - packet->offset, maxLength);
-	assert(chunk); // Otherwise, we return above due to !maxLength.
+	assert(chunk);  // Otherwise, we return above due to !maxLength.
 	memcpy(data, packet->buffer.data() + packet->offset, chunk);
 	packet->offset += chunk;
-	if(packet->offset == packet->buffer.size())
+	if(packet->offset == packet->buffer.size()) {
 		_channel->masterQueue.pop_front();
+	}
 	co_return chunk;
 }
 
 async::result<frg::expected<Error, size_t>>
 MasterFile::writeAll(Process *, const void *data, size_t length) {
-	if(logReadWrite)
+	if(logReadWrite) {
 		std::cout << "posix: Write to tty " << structName() << std::endl;
+	}
 
 	Packet packet;
 	packet.buffer.reserve(length);
@@ -561,36 +607,44 @@ MasterFile::getControllingTerminal() {
 	co_return &_channel->cts;
 }
 
-async::result<frg::expected<Error, PollWaitResult>>
-MasterFile::pollWait(Process *, uint64_t past_seq, int mask,
-		async::cancellation_token cancellation) {
-	(void)mask; // TODO: utilize mask.
+async::result<frg::expected<Error, PollWaitResult>> MasterFile::pollWait(
+	Process *,
+	uint64_t past_seq,
+	int mask,
+	async::cancellation_token cancellation
+) {
+	(void) mask;  // TODO: utilize mask.
 	assert(past_seq <= _channel->currentSeq);
 
-	while(past_seq == _channel->currentSeq
-			&& !cancellation.is_cancellation_requested())
+	while(past_seq == _channel->currentSeq && !cancellation.is_cancellation_requested()) {
 		co_await _channel->statusBell.async_wait(cancellation);
+	}
 
 	// For now making pts files always writable is sufficient.
 	int edges = EPOLLOUT;
-	if(_channel->masterInSeq > past_seq)
+	if(_channel->masterInSeq > past_seq) {
 		edges |= EPOLLIN;
+	}
 
-	co_return PollWaitResult{_channel->currentSeq, edges};
+	co_return PollWaitResult {_channel->currentSeq, edges};
 }
 
-async::result<frg::expected<Error, PollStatusResult>>
-MasterFile::pollStatus(Process *) {
+async::result<frg::expected<Error, PollStatusResult>> MasterFile::pollStatus(Process *) {
 	// For now making pts files always writable is sufficient.
 	int events = EPOLLOUT;
-	if(!_channel->masterQueue.empty())
+	if(!_channel->masterQueue.empty()) {
 		events |= EPOLLIN;
+	}
 
-	co_return PollStatusResult{_channel->currentSeq, events};
+	co_return PollStatusResult {_channel->currentSeq, events};
 }
 
-async::result<void> MasterFile::ioctl(Process *process, uint32_t id, helix_ng::RecvInlineResult msg,
-		helix::UniqueLane conversation) {
+async::result<void> MasterFile::ioctl(
+	Process *process,
+	uint32_t id,
+	helix_ng::RecvInlineResult msg,
+	helix::UniqueLane conversation
+) {
 	if(id == managarm::fs::GenericIoctlRequest::message_id) {
 		auto req = bragi::parse_head_only<managarm::fs::GenericIoctlRequest>(msg);
 		assert(req);
@@ -607,15 +661,16 @@ async::result<void> MasterFile::ioctl(Process *process, uint32_t id, helix_ng::R
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else if(req->command() == TIOCSWINSZ) {
+		} else if(req->command() == TIOCSWINSZ) {
 			managarm::fs::SvrResponse resp;
 
-			if(logAttrs)
-				std::cout << "posix: PTS window size is now "
-						<< req->pts_width() << "x" << req->pts_height()
-						<< " chars, "
-						<< req->pts_pixel_width() << "x" << req->pts_pixel_height()
-						<< " pixels (set by master)" << std::endl;
+			if(logAttrs) {
+				std::cout << "posix: PTS window size is now " << req->pts_width()
+					  << "x" << req->pts_height() << " chars, "
+					  << req->pts_pixel_width() << "x"
+					  << req->pts_pixel_height() << " pixels (set by master)"
+					  << std::endl;
+			}
 
 			_channel->width = req->pts_width();
 			_channel->height = req->pts_height();
@@ -634,12 +689,16 @@ async::result<void> MasterFile::ioctl(Process *process, uint32_t id, helix_ng::R
 			// XXX: This should deliver SIGWINCH to the parent under certain conditions
 			UserSignal info;
 			_channel->cts.issueSignalToForegroundGroup(SIGWINCH, info);
-		}else if(req->command() == FIONREAD) {
+		} else if(req->command() == FIONREAD) {
 			managarm::fs::SvrResponse resp;
 
-			size_t count = std::transform_reduce(_channel->masterQueue.begin(), _channel->masterQueue.end(), size_t{0}, std::plus<>(), [] (const Packet &p) {
-				return p.buffer.size() - p.offset;
-			});
+			size_t count = std::transform_reduce(
+				_channel->masterQueue.begin(),
+				_channel->masterQueue.end(),
+				size_t {0},
+				std::plus<>(),
+				[](const Packet &p) { return p.buffer.size() - p.offset; }
+			);
 
 			resp.set_fionread_count(count);
 			resp.set_error(managarm::fs::Errors::SUCCESS);
@@ -650,16 +709,18 @@ async::result<void> MasterFile::ioctl(Process *process, uint32_t id, helix_ng::R
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else if(req->command() == TIOCSCTTY || req->command() == TIOCGPGRP
-				|| req->command() == TIOCSPGRP || req->command() == TIOCGSID) {
-			co_await _channel->commonIoctl(process, id, std::move(msg), std::move(conversation));
-		}else{
-			std::cout << "\e[31m" "posix: Rejecting unknown PTS master ioctl " << req->command()
-					<< "\e[39m" << std::endl;
+		} else if(req->command() == TIOCSCTTY || req->command() == TIOCGPGRP || req->command() == TIOCSPGRP || req->command() == TIOCGSID) {
+			co_await _channel
+				->commonIoctl(process, id, std::move(msg), std::move(conversation));
+		} else {
+			std::cout << "\e[31m"
+				     "posix: Rejecting unknown PTS master ioctl "
+				  << req->command() << "\e[39m" << std::endl;
 		}
-	}else{
-		std::cout << "\e[31m" "posix: Rejecting unknown PTS master ioctl message " << id
-				<< "\e[39m" << std::endl;
+	} else {
+		std::cout << "\e[31m"
+			     "posix: Rejecting unknown PTS master ioctl message "
+			  << id << "\e[39m" << std::endl;
 	}
 }
 
@@ -668,45 +729,63 @@ async::result<void> MasterFile::ioctl(Process *process, uint32_t id, helix_ng::R
 //-----------------------------------------------------------------------------
 
 SlaveDevice::SlaveDevice(std::shared_ptr<Channel> channel)
-: UnixDevice(VfsType::charDevice), _channel{std::move(channel)} {
+: UnixDevice(VfsType::charDevice)
+, _channel {std::move(channel)} {
 	assignId({136, _channel->ptsIndex});
 }
 
-async::result<frg::expected<Error, SharedFilePtr>>
-SlaveDevice::open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-		SemanticFlags semantic_flags) {
-	if(semantic_flags & ~(semanticNonBlock | semanticRead | semanticWrite)){
-		std::cout << "\e[31mposix: open() received illegal arguments:"
+async::result<frg::expected<Error, SharedFilePtr>> SlaveDevice::open(
+	std::shared_ptr<MountView> mount,
+	std::shared_ptr<FsLink> link,
+	SemanticFlags semantic_flags
+) {
+	if(semantic_flags & ~(semanticNonBlock | semanticRead | semanticWrite)) {
+		std::cout
+			<< "\e[31mposix: open() received illegal arguments:"
 			<< std::bitset<32>(semantic_flags)
 			<< "\nOnly semanticNonBlock (0x1), semanticRead (0x2) and semanticWrite(0x4) are allowed.\e[39m"
 			<< std::endl;
 		co_return Error::illegalArguments;
 	}
 
-	auto file = smarter::make_shared<SlaveFile>(std::move(mount), std::move(link), _channel,
-			semantic_flags & semanticNonBlock);
+	auto file = smarter::make_shared<SlaveFile>(
+		std::move(mount),
+		std::move(link),
+		_channel,
+		semantic_flags & semanticNonBlock
+	);
 	file->setupWeakFile(file);
 	SlaveFile::serve(file);
 	co_return File::constructHandle(std::move(file));
 }
 
-SlaveFile::SlaveFile(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-		std::shared_ptr<Channel> channel, bool nonBlock)
-: File{StructName::get("pts.slave"), std::move(mount), std::move(link),
-		File::defaultIsTerminal | File::defaultPipeLikeSeek},
-		_channel{std::move(channel)}, nonBlock_{nonBlock} { }
+SlaveFile::SlaveFile(
+	std::shared_ptr<MountView> mount,
+	std::shared_ptr<FsLink> link,
+	std::shared_ptr<Channel> channel,
+	bool nonBlock
+)
+: File {StructName::get("pts.slave"),
+	std::move(mount),
+	std::move(link),
+	File::defaultIsTerminal | File::defaultPipeLikeSeek}
+, _channel {std::move(channel)}
+, nonBlock_ {nonBlock} {}
 
 async::result<frg::expected<Error, size_t>>
 SlaveFile::readSome(Process *, void *data, size_t maxLength) {
-	if(logReadWrite)
+	if(logReadWrite) {
 		std::cout << "posix: Read from tty " << structName() << std::endl;
-	if(!maxLength)
+	}
+	if(!maxLength) {
 		co_return 0;
+	}
 
-	while(_channel->slaveQueue.empty()){
-		if(nonBlock_){
-			if(logReadWrite)
+	while(_channel->slaveQueue.empty()) {
+		if(nonBlock_) {
+			if(logReadWrite) {
 				std::cout << "posix: tty would block" << std::endl;
+			}
 			co_return Error::wouldBlock;
 		}
 		co_await _channel->statusBell.async_wait();
@@ -714,22 +793,24 @@ SlaveFile::readSome(Process *, void *data, size_t maxLength) {
 
 	auto packet = &_channel->slaveQueue.front();
 	auto chunk = std::min(packet->buffer.size() - packet->offset, maxLength);
-	assert(chunk); // Otherwise, we return above due to !maxLength.
+	assert(chunk);  // Otherwise, we return above due to !maxLength.
 	memcpy(data, packet->buffer.data() + packet->offset, chunk);
 	packet->offset += chunk;
-	if(packet->offset == packet->buffer.size())
+	if(packet->offset == packet->buffer.size()) {
 		_channel->slaveQueue.pop_front();
+	}
 	co_return chunk;
 }
 
-
 async::result<frg::expected<Error, size_t>>
 SlaveFile::writeAll(Process *, const void *data, size_t length) {
-	if(logReadWrite)
+	if(logReadWrite) {
 		std::cout << "posix: Write to tty " << structName() << std::endl;
+	}
 
-	if(!length)
+	if(!length) {
 		co_return {};
+	}
 
 	// Perform output processing.
 	std::stringstream ss;
@@ -737,10 +818,10 @@ SlaveFile::writeAll(Process *, const void *data, size_t length) {
 		char c;
 		memcpy(&c, reinterpret_cast<const char *>(data) + i, 1);
 		if((_channel->activeSettings.c_oflag & ONLCR) && c == '\n') {
-//			std::cout << "Mapping NL -> CR,NL" << std::endl;
+			//			std::cout << "Mapping NL -> CR,NL" << std::endl;
 			ss << "\r\n";
-		}else{
-//			std::cout << "c: " << (int)c << std::endl;
+		} else {
+			//			std::cout << "c: " << (int)c << std::endl;
 			ss << c;
 		}
 	}
@@ -764,35 +845,43 @@ SlaveFile::getControllingTerminal() {
 	co_return &_channel->cts;
 }
 
-async::result<frg::expected<Error, PollWaitResult>>
-SlaveFile::pollWait(Process *, uint64_t past_seq, int mask,
-		async::cancellation_token cancellation) {
-	(void)mask; // TODO: utilize mask.
+async::result<frg::expected<Error, PollWaitResult>> SlaveFile::pollWait(
+	Process *,
+	uint64_t past_seq,
+	int mask,
+	async::cancellation_token cancellation
+) {
+	(void) mask;  // TODO: utilize mask.
 	assert(past_seq <= _channel->currentSeq);
-	while(past_seq == _channel->currentSeq
-			&& !cancellation.is_cancellation_requested())
+	while(past_seq == _channel->currentSeq && !cancellation.is_cancellation_requested()) {
 		co_await _channel->statusBell.async_wait(cancellation);
+	}
 
 	// For now making pts files always writable is sufficient.
 	int edges = EPOLLOUT;
-	if(_channel->slaveInSeq > past_seq)
+	if(_channel->slaveInSeq > past_seq) {
 		edges |= EPOLLIN;
+	}
 
-	co_return PollWaitResult{_channel->currentSeq, edges};
+	co_return PollWaitResult {_channel->currentSeq, edges};
 }
 
-async::result<frg::expected<Error, PollStatusResult>>
-SlaveFile::pollStatus(Process *) {
+async::result<frg::expected<Error, PollStatusResult>> SlaveFile::pollStatus(Process *) {
 	// For now making pts files always writable is sufficient.
 	int events = EPOLLOUT;
-	if(!_channel->slaveQueue.empty())
+	if(!_channel->slaveQueue.empty()) {
 		events |= EPOLLIN;
+	}
 
-	co_return PollStatusResult{_channel->currentSeq, events};
+	co_return PollStatusResult {_channel->currentSeq, events};
 }
 
-async::result<void> SlaveFile::ioctl(Process *process, uint32_t id, helix_ng::RecvInlineResult msg,
-		helix::UniqueLane conversation) {
+async::result<void> SlaveFile::ioctl(
+	Process *process,
+	uint32_t id,
+	helix_ng::RecvInlineResult msg,
+	helix::UniqueLane conversation
+) {
 	if(id == managarm::fs::GenericIoctlRequest::message_id) {
 		auto req = bragi::parse_head_only<managarm::fs::GenericIoctlRequest>(msg);
 		req.reset();
@@ -807,8 +896,9 @@ async::result<void> SlaveFile::ioctl(Process *process, uint32_t id, helix_ng::Re
 			attrs.c_oflag = _channel->activeSettings.c_oflag;
 			attrs.c_cflag = _channel->activeSettings.c_cflag;
 			attrs.c_lflag = _channel->activeSettings.c_lflag;
-			for(int i = 0; i < NCCS; i++)
+			for(int i = 0; i < NCCS; i++) {
 				attrs.c_cc[i] = _channel->activeSettings.c_cc[i];
+			}
 
 			resp.set_error(managarm::fs::Errors::SUCCESS);
 
@@ -820,7 +910,7 @@ async::result<void> SlaveFile::ioctl(Process *process, uint32_t id, helix_ng::Re
 			);
 			HEL_CHECK(send_resp.error());
 			HEL_CHECK(send_attrs.error());
-		}else if(req->command() == TCSETS) {
+		} else if(req->command() == TCSETS) {
 			struct termios attrs;
 			managarm::fs::SvrResponse resp;
 
@@ -832,15 +922,16 @@ async::result<void> SlaveFile::ioctl(Process *process, uint32_t id, helix_ng::Re
 
 			if(logAttrs) {
 				std::cout << "posix: TCSETS request\n"
-						<< "    iflag: 0x" << attrs.c_iflag << '\n'
-						<< "    oflag: 0x" << attrs.c_oflag << '\n'
-						<< "    cflag: 0x" << attrs.c_cflag << '\n'
-						<< "    lflag: 0x" << attrs.c_lflag << '\n';
+					  << "    iflag: 0x" << attrs.c_iflag << '\n'
+					  << "    oflag: 0x" << attrs.c_oflag << '\n'
+					  << "    cflag: 0x" << attrs.c_cflag << '\n'
+					  << "    lflag: 0x" << attrs.c_lflag << '\n';
 				for(int i = 0; i < NCCS; i++) {
 					std::cout << std::dec << "   cc[" << i << "]: 0x"
-							<< std::hex << (int)attrs.c_cc[i];
-					if(i + 1 < NCCS)
+						  << std::hex << (int) attrs.c_cc[i];
+					if(i + 1 < NCCS) {
 						std::cout << '\n';
+					}
 				}
 				std::cout << std::dec << std::endl;
 			}
@@ -853,7 +944,7 @@ async::result<void> SlaveFile::ioctl(Process *process, uint32_t id, helix_ng::Re
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else if(req->command() == TIOCGWINSZ) {
+		} else if(req->command() == TIOCGWINSZ) {
 			managarm::fs::SvrResponse resp;
 
 			resp.set_error(managarm::fs::Errors::SUCCESS);
@@ -868,15 +959,16 @@ async::result<void> SlaveFile::ioctl(Process *process, uint32_t id, helix_ng::Re
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else if(req->command() == TIOCSWINSZ) {
+		} else if(req->command() == TIOCSWINSZ) {
 			managarm::fs::SvrResponse resp;
 
-			if(logAttrs)
-				std::cout << "posix: PTS window size is now "
-						<< req->pts_width() << "x" << req->pts_height()
-						<< " chars, "
-						<< req->pts_pixel_width() << "x" << req->pts_pixel_height()
-						<< " pixels (set by slave)" << std::endl;
+			if(logAttrs) {
+				std::cout << "posix: PTS window size is now " << req->pts_width()
+					  << "x" << req->pts_height() << " chars, "
+					  << req->pts_pixel_width() << "x"
+					  << req->pts_pixel_height() << " pixels (set by slave)"
+					  << std::endl;
+			}
 
 			_channel->width = req->pts_width();
 			_channel->height = req->pts_height();
@@ -895,17 +987,17 @@ async::result<void> SlaveFile::ioctl(Process *process, uint32_t id, helix_ng::Re
 			// XXX: This should deliver SIGWINCH to the parent under certain conditions
 			UserSignal info;
 			_channel->cts.issueSignalToForegroundGroup(SIGWINCH, info);
-		}else if(req->command() == TIOCSCTTY || req->command() == TIOCGPGRP
-				|| req->command() == TIOCSPGRP || req->command() == TIOCGSID) {
-			co_await _channel->commonIoctl(process, id, std::move(msg), std::move(conversation));
-		}else if(req->command() == TIOCINQ) {
+		} else if(req->command() == TIOCSCTTY || req->command() == TIOCGPGRP || req->command() == TIOCSPGRP || req->command() == TIOCGSID) {
+			co_await _channel
+				->commonIoctl(process, id, std::move(msg), std::move(conversation));
+		} else if(req->command() == TIOCINQ) {
 			managarm::fs::SvrResponse resp;
 
 			resp.set_error(managarm::fs::Errors::SUCCESS);
 
 			if(_channel->slaveQueue.empty()) {
 				resp.set_fionread_count(0);
-			}else{
+			} else {
 				auto packet = &_channel->slaveQueue.front();
 				resp.set_fionread_count(packet->buffer.size() - packet->offset);
 			}
@@ -916,26 +1008,29 @@ async::result<void> SlaveFile::ioctl(Process *process, uint32_t id, helix_ng::Re
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else{
-			std::cout << "\e[31m" "posix: Rejecting unknown PTS slave ioctl " << req->command()
-					<< "\e[39m" << std::endl;
+		} else {
+			std::cout << "\e[31m"
+				     "posix: Rejecting unknown PTS slave ioctl "
+				  << req->command() << "\e[39m" << std::endl;
 		}
-	}else{
-		std::cout << "\e[31m" "posix: Rejecting unknown PTS slave ioctl message " << id
-				<< "\e[39m" << std::endl;
+	} else {
+		std::cout << "\e[31m"
+			     "posix: Rejecting unknown PTS slave ioctl message "
+			  << id << "\e[39m" << std::endl;
 	}
 }
 
-async::result<frg::expected<Error, std::string>>
-SlaveFile::ttyname() {
+async::result<frg::expected<Error, std::string>> SlaveFile::ttyname() {
 	std::shared_ptr<FsLink> me = associatedLink();
 	std::string name;
-	if(!isTerminal())
+	if(!isTerminal()) {
 		co_return Error::notTerminal;
+	}
 
-	name = me->getName();;
+	name = me->getName();
+	;
 
-	//TODO: dynamically resolve absolute path?
+	// TODO: dynamically resolve absolute path?
 	co_return std::string("/dev/pts/").append(name);
 }
 
@@ -955,8 +1050,7 @@ std::shared_ptr<FsNode> Link::getTarget() {
 	return _device;
 }
 
-RootLink::RootLink()
-: _root(std::make_shared<RootNode>()) { }
+RootLink::RootLink() : _root(std::make_shared<RootNode>()) {}
 
 std::shared_ptr<FsNode> RootLink::getTarget() {
 	return _root->shared_from_this();
@@ -964,7 +1058,7 @@ std::shared_ptr<FsNode> RootLink::getTarget() {
 
 std::shared_ptr<RootLink> globalRootLink = std::make_shared<RootLink>();
 
-} // anonymous namespace
+}  // anonymous namespace
 
 std::shared_ptr<UnixDevice> createMasterDevice() {
 	return std::make_shared<MasterDevice>();
@@ -974,4 +1068,4 @@ std::shared_ptr<FsLink> getFsRoot() {
 	return globalRootLink;
 }
 
-} // namespace pts
+}  // namespace pts

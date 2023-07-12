@@ -1,12 +1,12 @@
 
-#include <string.h>
+#include "sysfs.hpp"
 
 #include "clock.hpp"
 #include "common.hpp"
 #include "device.hpp"
-#include "sysfs.hpp"
 
 #include <bitset>
+#include <string.h>
 
 namespace sysfs {
 
@@ -14,15 +14,15 @@ namespace sysfs {
 // LinkCompare implementation.
 // ----------------------------------------------------------------------------
 
-bool LinkCompare::operator() (const std::shared_ptr<Link> &a, const std::shared_ptr<Link> &b) const {
+bool LinkCompare::operator()(const std::shared_ptr<Link> &a, const std::shared_ptr<Link> &b) const {
 	return a->getName() < b->getName();
 }
 
-bool LinkCompare::operator() (const std::shared_ptr<Link> &link, const std::string &name) const {
+bool LinkCompare::operator()(const std::shared_ptr<Link> &link, const std::string &name) const {
 	return link->getName() < name;
 }
 
-bool LinkCompare::operator() (const std::string &name, const std::shared_ptr<Link> &link) const {
+bool LinkCompare::operator()(const std::string &name, const std::shared_ptr<Link> &link) const {
 	return name < link->getName();
 }
 
@@ -40,17 +40,22 @@ async::result<void> Attribute::store(Object *, std::string) {
 // ----------------------------------------------------------------------------
 
 void AttributeFile::serve(smarter::shared_ptr<AttributeFile> file) {
-//TODO:		assert(!file->_passthrough);
+	// TODO:		assert(!file->_passthrough);
 
 	helix::UniqueLane lane;
 	std::tie(lane, file->_passthrough) = helix::createStream();
-	async::detach(protocols::fs::servePassthrough(std::move(lane),
-			file, &File::fileOperations, file->_cancelServe));
+	async::detach(protocols::fs::servePassthrough(
+		std::move(lane),
+		file,
+		&File::fileOperations,
+		file->_cancelServe
+	));
 }
 
 AttributeFile::AttributeFile(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link)
-: File{StructName::get("sysfs.attr"), std::move(mount), std::move(link)},
-		_cached{false}, _offset{0} { }
+: File {StructName::get("sysfs.attr"), std::move(mount), std::move(link)}
+, _cached {false}
+, _offset {0} {}
 
 void AttributeFile::handleClose() {
 	_cancelServe.cancel();
@@ -75,8 +80,9 @@ AttributeFile::readSome(Process *, void *data, size_t max_length) {
 		_cached = true;
 	}
 
-	if(_offset >= _buffer.size())
+	if(_offset >= _buffer.size()) {
 		co_return 0;
+	}
 	size_t chunk = std::min(_buffer.size() - _offset, max_length);
 	memcpy(data, _buffer.data() + _offset, chunk);
 	_offset += chunk;
@@ -84,12 +90,14 @@ AttributeFile::readSome(Process *, void *data, size_t max_length) {
 }
 
 async::result<frg::expected<Error, size_t>>
-AttributeFile::writeAll(Process *, const void *data, size_t length)  {
+AttributeFile::writeAll(Process *, const void *data, size_t length) {
 	assert(length > 0);
 
 	auto node = static_cast<AttributeNode *>(associatedLink()->getTarget().get());
-	co_await node->_attr->store(node->_object,
-			std::string{reinterpret_cast<const char *>(data), length});
+	co_await node->_attr->store(
+		node->_object,
+		std::string {reinterpret_cast<const char *>(data), length}
+	);
 	co_return length;
 }
 
@@ -102,18 +110,22 @@ helix::BorrowedDescriptor AttributeFile::getPassthroughLane() {
 // ----------------------------------------------------------------------------
 
 void DirectoryFile::serve(smarter::shared_ptr<DirectoryFile> file) {
-//TODO:		assert(!file->_passthrough);
+	// TODO:		assert(!file->_passthrough);
 
 	helix::UniqueLane lane;
 	std::tie(lane, file->_passthrough) = helix::createStream();
-	async::detach(protocols::fs::servePassthrough(std::move(lane),
-			file, &File::fileOperations, file->_cancelServe));
+	async::detach(protocols::fs::servePassthrough(
+		std::move(lane),
+		file,
+		&File::fileOperations,
+		file->_cancelServe
+	));
 }
 
 DirectoryFile::DirectoryFile(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link)
-: File{StructName::get("sysfs.dir"), std::move(mount), std::move(link)},
-		_node{static_cast<DirectoryNode *>(associatedLink()->getTarget().get())},
-		_iter{_node->_entries.begin()} { }
+: File {StructName::get("sysfs.dir"), std::move(mount), std::move(link)}
+, _node {static_cast<DirectoryNode *>(associatedLink()->getTarget().get())}
+, _iter {_node->_entries.begin()} {}
 
 void DirectoryFile::handleClose() {
 	_cancelServe.cancel();
@@ -125,7 +137,7 @@ async::result<ReadEntriesResult> DirectoryFile::readEntries() {
 		auto name = (*_iter)->getName();
 		_iter++;
 		co_return name;
-	}else{
+	} else {
 		co_return std::nullopt;
 	}
 }
@@ -138,11 +150,12 @@ helix::BorrowedDescriptor DirectoryFile::getPassthroughLane() {
 // Link implementation.
 // ----------------------------------------------------------------------------
 
-Link::Link(std::shared_ptr<FsNode> target)
-: _target{std::move(target)} { }
+Link::Link(std::shared_ptr<FsNode> target) : _target {std::move(target)} {}
 
 Link::Link(std::shared_ptr<FsNode> owner, std::string name, std::shared_ptr<FsNode> target)
-: _owner{std::move(owner)}, _name{std::move(name)}, _target{std::move(target)} {
+: _owner {std::move(owner)}
+, _name {std::move(name)}
+, _target {std::move(target)} {
 	assert(_owner);
 	assert(!_name.empty());
 }
@@ -165,8 +178,7 @@ std::shared_ptr<FsNode> Link::getTarget() {
 // AttributeNode implementation.
 // ----------------------------------------------------------------------------
 
-AttributeNode::AttributeNode(Object *object, Attribute *attr)
-: _object{object}, _attr{attr} { }
+AttributeNode::AttributeNode(Object *object, Attribute *attr) : _object {object}, _attr {attr} {}
 
 VfsType AttributeNode::getType() {
 	return VfsType::regular;
@@ -177,10 +189,10 @@ async::result<frg::expected<Error, FileStats>> AttributeNode::getStats() {
 	auto now = clk::getRealtime();
 
 	FileStats stats;
-	stats.inodeNumber = 0; // FIXME
+	stats.inodeNumber = 0;  // FIXME
 	stats.numLinks = 1;
-	stats.fileSize = 4096; // Same as in Linux.
-	stats.mode = _attr->writable() ? 0666 : 0444; // TODO: Some files can be written.
+	stats.fileSize = 4096;  // Same as in Linux.
+	stats.mode = _attr->writable() ? 0666 : 0444;  // TODO: Some files can be written.
 	stats.uid = 0;
 	stats.gid = 0;
 	stats.atimeSecs = now.tv_sec;
@@ -192,14 +204,16 @@ async::result<frg::expected<Error, FileStats>> AttributeNode::getStats() {
 	co_return stats;
 }
 
-async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-AttributeNode::open(std::shared_ptr<MountView> mount,
-		std::shared_ptr<FsLink> link, SemanticFlags semantic_flags) {
-	if(semantic_flags & ~(semanticRead | semanticWrite)){
+async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>> AttributeNode::open(
+	std::shared_ptr<MountView> mount,
+	std::shared_ptr<FsLink> link,
+	SemanticFlags semantic_flags
+) {
+	if(semantic_flags & ~(semanticRead | semanticWrite)) {
 		std::cout << "\e[31mposix: open() received illegal arguments:"
-			<< std::bitset<32>(semantic_flags)
-			<< "\nOnly semanticRead (0x2) and semanticWrite(0x4) are allowed.\e[39m"
-			<< std::endl;
+			  << std::bitset<32>(semantic_flags)
+			  << "\nOnly semanticRead (0x2) and semanticWrite(0x4) are allowed.\e[39m"
+			  << std::endl;
 		co_return Error::illegalArguments;
 	}
 
@@ -213,8 +227,7 @@ AttributeNode::open(std::shared_ptr<MountView> mount,
 // SymlinkNode implementation.
 // ----------------------------------------------------------------------------
 
-SymlinkNode::SymlinkNode(std::weak_ptr<Object> target)
-: _target{std::move(target)} { }
+SymlinkNode::SymlinkNode(std::weak_ptr<Object> target) : _target {std::move(target)} {}
 
 VfsType SymlinkNode::getType() {
 	return VfsType::symlink;
@@ -222,7 +235,7 @@ VfsType SymlinkNode::getType() {
 
 async::result<frg::expected<Error, FileStats>> SymlinkNode::getStats() {
 	std::cout << "\e[31mposix: Fix sysfs SymlinkNode::getStats()\e[39m" << std::endl;
-	co_return FileStats{};
+	co_return FileStats {};
 }
 
 expected<std::string> SymlinkNode::readSymlink(FsLink *link, Process *process) {
@@ -235,8 +248,9 @@ expected<std::string> SymlinkNode::readSymlink(FsLink *link, Process *process) {
 	auto ref = object->directoryNode();
 	while(true) {
 		auto link = ref->treeLink();
-		if(!link->getOwner())
+		if(!link->getOwner()) {
 			break;
+		}
 		path = path.empty() ? link->getName() : link->getName() + "/" + path;
 		ref = std::static_pointer_cast<DirectoryNode>(link->getOwner());
 	}
@@ -245,8 +259,9 @@ expected<std::string> SymlinkNode::readSymlink(FsLink *link, Process *process) {
 	ref = std::static_pointer_cast<DirectoryNode>(link->getOwner());
 	while(true) {
 		auto link = ref->treeLink();
-		if(!link->getOwner())
+		if(!link->getOwner()) {
 			break;
+		}
 		path = "../" + path;
 		ref = std::static_pointer_cast<DirectoryNode>(link->getOwner());
 	}
@@ -266,8 +281,7 @@ std::shared_ptr<Link> DirectoryNode::createRootDirectory() {
 	return link;
 }
 
-DirectoryNode::DirectoryNode()
-: _treeLink{nullptr} { }
+DirectoryNode::DirectoryNode() : _treeLink {nullptr} {}
 
 std::shared_ptr<Link> DirectoryNode::directMkattr(Object *object, Attribute *attr) {
 	assert(_entries.find(attr->name()) == _entries.end());
@@ -301,7 +315,7 @@ VfsType DirectoryNode::getType() {
 
 async::result<frg::expected<Error, FileStats>> DirectoryNode::getStats() {
 	std::cout << "\e[31mposix: Fix sysfs Directory::getStats()\e[39m" << std::endl;
-	co_return FileStats{};
+	co_return FileStats {};
 }
 
 std::shared_ptr<FsLink> DirectoryNode::treeLink() {
@@ -309,14 +323,16 @@ std::shared_ptr<FsLink> DirectoryNode::treeLink() {
 	return _treeLink ? _treeLink->shared_from_this() : nullptr;
 }
 
-async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-DirectoryNode::open(std::shared_ptr<MountView> mount,
-		std::shared_ptr<FsLink> link, SemanticFlags semantic_flags) {
-	if(semantic_flags & ~(semanticRead | semanticWrite)){
+async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>> DirectoryNode::open(
+	std::shared_ptr<MountView> mount,
+	std::shared_ptr<FsLink> link,
+	SemanticFlags semantic_flags
+) {
+	if(semantic_flags & ~(semanticRead | semanticWrite)) {
 		std::cout << "\e[31mposix: open() received illegal arguments:"
-			<< std::bitset<32>(semantic_flags)
-			<< "\nOnly semanticRead (0x2) and semanticWrite(0x4) are allowed.\e[39m"
-			<< std::endl;
+			  << std::bitset<32>(semantic_flags)
+			  << "\nOnly semanticRead (0x2) and semanticWrite(0x4) are allowed.\e[39m"
+			  << std::endl;
 		co_return Error::illegalArguments;
 	}
 
@@ -326,11 +342,13 @@ DirectoryNode::open(std::shared_ptr<MountView> mount,
 	co_return File::constructHandle(std::move(file));
 }
 
-async::result<frg::expected<Error, std::shared_ptr<FsLink>>> DirectoryNode::getLink(std::string name) {
+async::result<frg::expected<Error, std::shared_ptr<FsLink>>> DirectoryNode::getLink(std::string name
+) {
 	auto it = _entries.find(name);
-	if(it != _entries.end())
+	if(it != _entries.end()) {
 		co_return *it;
-	co_return nullptr; // TODO: Return an error code.
+	}
+	co_return nullptr;  // TODO: Return an error code.
 }
 
 // ----------------------------------------------------------------------------
@@ -338,14 +356,16 @@ async::result<frg::expected<Error, std::shared_ptr<FsLink>>> DirectoryNode::getL
 // ----------------------------------------------------------------------------
 
 Attribute::Attribute(std::string name, bool writable)
-: _name{std::move(name)}, _writable{writable} { }
+: _name {std::move(name)}
+, _writable {writable} {}
 
 // ----------------------------------------------------------------------------
 // Object implementation
 // ----------------------------------------------------------------------------
 
 Object::Object(std::shared_ptr<Object> parent, std::string name)
-: _parent{std::move(parent)}, _name{std::move(name)} { }
+: _parent {std::move(parent)}
+, _name {std::move(name)} {}
 
 std::shared_ptr<DirectoryNode> Object::directoryNode() {
 	return std::static_pointer_cast<DirectoryNode>(_dirLink->getTarget());
@@ -366,18 +386,18 @@ void Object::createSymlink(std::string name, std::shared_ptr<Object> target) {
 void Object::addObject() {
 	if(_parent) {
 		assert(_parent->_dirLink);
-		auto parent_dir = static_cast<DirectoryNode *>(_parent->_dirLink->getTarget().get());
+		auto parent_dir =
+			static_cast<DirectoryNode *>(_parent->_dirLink->getTarget().get());
 		_dirLink = parent_dir->directMkdir(_name);
-	}else{
+	} else {
 		auto parent_dir = static_cast<DirectoryNode *>(getSysfs()->getTarget().get());
 		_dirLink = parent_dir->directMkdir(_name);
 	}
 }
 
-} // namespace sysfs
+}  // namespace sysfs
 
 std::shared_ptr<FsLink> getSysfs() {
 	static std::shared_ptr<FsLink> sysfs = sysfs::DirectoryNode::createRootDirectory();
 	return sysfs;
 }
-

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <thor-internal/irq.hpp>
 #include <initgraph.hpp>
+#include <thor-internal/irq.hpp>
 
 namespace thor {
 
@@ -16,7 +16,7 @@ GlobalIrqInfo resolveIsaIrq(unsigned int irq);
 GlobalIrqInfo resolveIsaIrq(unsigned int irq, IrqConfiguration desired);
 void configureIrq(GlobalIrqInfo info);
 
-} // namespace thor
+}  // namespace thor
 
 namespace thor {
 namespace acpi {
@@ -24,4 +24,5 @@ namespace acpi {
 initgraph::Stage *getTablesDiscoveredStage();
 initgraph::Stage *getNsAvailableStage();
 
-} } // namespace thor::acpi
+}  // namespace acpi
+}  // namespace thor

@@ -1,6 +1,6 @@
 
-#include <async/recurring-event.hpp>
 #include <async/oneshot-event.hpp>
+#include <async/recurring-event.hpp>
 #include <async/result.hpp>
 #include <blockfs.hpp>
 #include <boost/intrusive/list.hpp>
@@ -10,7 +10,7 @@ enum Signatures {
 	kSignCsw = 0x53425355
 };
 
-struct [[ gnu::packed ]] CommandBlockWrapper {
+struct [[gnu::packed]] CommandBlockWrapper {
 	uint32_t signature;
 	uint32_t tag;
 	uint32_t transferLength;
@@ -19,14 +19,16 @@ struct [[ gnu::packed ]] CommandBlockWrapper {
 	uint8_t cmdLength;
 	uint8_t cmdData[16];
 };
+
 static_assert(sizeof(CommandBlockWrapper) == 31);
 
-struct [[ gnu::packed ]] CommandStatusWrapper {
+struct [[gnu::packed]] CommandStatusWrapper {
 	uint32_t signature;
 	uint32_t tag;
 	uint32_t dataResidue;
 	uint8_t status;
 };
+
 static_assert(sizeof(CommandStatusWrapper) == 13);
 
 namespace scsi {
@@ -37,6 +39,7 @@ struct Read6 {
 	uint8_t transferLength;
 	uint8_t control;
 };
+
 static_assert(sizeof(Read6) == 6);
 
 struct Read10 {
@@ -47,6 +50,7 @@ struct Read10 {
 	uint8_t transferLength[2];
 	uint8_t control;
 };
+
 static_assert(sizeof(Read10) == 10);
 
 struct Write10 {
@@ -57,6 +61,7 @@ struct Write10 {
 	uint8_t transferLength[2];
 	uint8_t control;
 };
+
 static_assert(sizeof(Write10) == 10);
 
 struct Read12 {
@@ -93,27 +98,30 @@ struct Read32 {
 	uint8_t transferLength[4];
 };
 
-} // namespace scsi
+}  // namespace scsi
 
 struct StorageDevice : blockfs::BlockDevice {
-	//TODO(geert): hook up USB to sysfs too
+	// TODO(geert): hook up USB to sysfs too
 	StorageDevice(Device usb_device)
-	: blockfs::BlockDevice(512, -1), _usbDevice(std::move(usb_device)) { }
+	: blockfs::BlockDevice(512, -1)
+	, _usbDevice(std::move(usb_device)) {}
 
 	async::detached run(int config_num, int intf_num);
 
-	async::result<void> readSectors(uint64_t sector,
-			void *buffer, size_t numSectors) override;
+	async::result<void> readSectors(uint64_t sector, void *buffer, size_t numSectors) override;
 
-	async::result<void> writeSectors(uint64_t sector,
-			const void *buffer, size_t numSectors) override;
+	async::result<void>
+	writeSectors(uint64_t sector, const void *buffer, size_t numSectors) override;
 
 	async::result<size_t> getSize() override;
 
 private:
 	struct Request {
 		Request(bool isWrite, uint64_t sector, void *buffer, size_t numSectors)
-		: isWrite{isWrite}, sector{sector}, buffer{buffer}, numSectors{numSectors} { }
+		: isWrite {isWrite}
+		, sector {sector}
+		, buffer {buffer}
+		, numSectors {numSectors} {}
 
 		bool isWrite;
 		uint64_t sector;
@@ -131,8 +139,6 @@ private:
 		boost::intrusive::member_hook<
 			Request,
 			boost::intrusive::list_member_hook<>,
-			&Request::requestHook
-		>
-	> _queue;
+			&Request::requestHook>>
+		_queue;
 };
-

@@ -16,35 +16,32 @@ private:
 		T lb;
 		T ub;
 
-		friend bool operator< (const node &u, const node &v) {
-			return u.lb < v.lb;
-		}
+		friend bool operator<(const node &u, const node &v) { return u.lb < v.lb; }
 	};
 
 public:
-	id_allocator() { }
+	id_allocator() {}
 
 	void use_range(T lb = 1, T ub = std::numeric_limits<T>::max()) {
-		_nodes.insert(node{lb, ub});
+		_nodes.insert(node {lb, ub});
 	}
 
 	T allocate() {
 		assert(!_nodes.empty());
 		auto it = _nodes.begin();
 		auto id = it->lb;
-		if(it->lb < it->ub)
-			_nodes.insert(std::next(it), node{it->lb + 1, it->ub});
+		if(it->lb < it->ub) {
+			_nodes.insert(std::next(it), node {it->lb + 1, it->ub});
+		}
 		_nodes.erase(it);
 		return id;
 	}
 
 	void free(T id) {
 		// TODO: We could coalesce multiple adjacent nodes here.
-		_nodes.insert(node{id, id});
+		_nodes.insert(node {id, id});
 	}
 
 private:
 	std::set<node> _nodes;
 };
-
-

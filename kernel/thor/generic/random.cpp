@@ -1,12 +1,11 @@
 #include <atomic>
-
-#include <frg/manual_box.hpp>
 #include <cralgo/aes.hpp>
 #include <cralgo/sha2_32.hpp>
+#include <frg/manual_box.hpp>
 #include <thor-internal/arch/cpu.hpp>
+#include <thor-internal/debug.hpp>
 #include <thor-internal/kernel_heap.hpp>
 #include <thor-internal/random.hpp>
-#include <thor-internal/debug.hpp>
 
 namespace thor {
 
@@ -15,14 +14,14 @@ namespace {
 struct Fortuna {
 	// Key size of the block cipher in bytes.
 	// This must also equal the hash function's digest size.
-	static constexpr int keySize = 32;
+	constexpr static int keySize = 32;
 
 	// Block size of the block cipher in bytes.
 	// Must divide the blockSize (due to the key-regneration in generate()).
-	static constexpr int blockSize = 16;
+	constexpr static int blockSize = 16;
 
 	// Must be a power of 2 (due to the seqNum -> pool ID division in injectEntropy).
-	static constexpr int numPools = 32;
+	constexpr static int numPools = 32;
 
 	Fortuna() {
 		memset(keyBytes_, 0, keySize);
@@ -35,8 +34,8 @@ struct Fortuna {
 		}
 	}
 
-	void injectEntropy(uint8_t entropySource, unsigned int seqNum,
-			const void *buffer, size_t size) {
+	void
+	injectEntropy(uint8_t entropySource, unsigned int seqNum, const void *buffer, size_t size) {
 		assert(size <= 32 && "Entropy sources should hash their data instead of"
 				" large buffers into injectEntropy()");
 
@@ -48,11 +47,14 @@ struct Fortuna {
 			auto poolLock = frg::guard(&pool->poolMutex);
 
 			cralgo::sha256_update(&pool->entropyHash, prefix, 2);
-			cralgo::sha256_update(&pool->entropyHash, (const uint8_t *)buffer, size);
+			cralgo::sha256_update(&pool->entropyHash, (const uint8_t *) buffer, size);
 			if(!k) {
 				// TODO: for 32-bit size_t, this could potentially overflow.
 				//       For now, this should not be an issue though.
-				injectedIntoPoolZero_.fetch_add(2 + size, std::memory_order_release);
+				injectedIntoPoolZero_.fetch_add(
+					2 + size,
+					std::memory_order_release
+				);
 			}
 		}
 	}
@@ -68,7 +70,7 @@ struct Fortuna {
 		cralgo::sha256_update(&keyHash, keyBytes_, keySize);
 
 		// Secondly, hash in entropy.
-		cralgo::sha256_update(&keyHash, (const uint8_t *)seed, size);
+		cralgo::sha256_update(&keyHash, (const uint8_t *) seed, size);
 
 		// Update the block cipher key by applying SHA256d.
 		cralgo::sha256_finalize(&keyHash, tempDigest);
@@ -85,7 +87,8 @@ struct Fortuna {
 		auto generatorLock = frg::guard(&generatorMutex_);
 
 		if(injectedIntoPoolZero_.load(std::memory_order_acquire) >= entropyThreshold) {
-			infoLogger() << "thor: Reseeding PRNG from entropy accumulator" << frg::endlog;
+			infoLogger()
+				<< "thor: Reseeding PRNG from entropy accumulator" << frg::endlog;
 
 			cralgo::sha2_32_secrets keyHash;
 			cralgo::sha2_32_secrets localHash;
@@ -97,8 +100,9 @@ struct Fortuna {
 
 			// Secondly, hash in entropy.
 			for(int k = 0; k < numPools; ++k) {
-				if(reseedNumber_ & ((uint32_t{1} << k) - 1))
+				if(reseedNumber_ & ((uint32_t {1} << k) - 1)) {
 					break;
+				}
 				auto pool = &pools_[k];
 				{
 					auto poolLock = frg::guard(&pool->poolMutex);
@@ -122,10 +126,11 @@ struct Fortuna {
 			cralgo::sha256_update(&keyHash, tempDigest, keySize);
 			cralgo::sha256_finalize(&keyHash, keyBytes_);
 
-			// Note: since we clear pool zero (and drop the lock) in the loop above but only reset
-			//       the counter here, it can happen that there was more entropy injected into
-			//       pool zero in the meantime. In that case, however, we will only underestimate
-			//       the true amount of entropy in the pool.
+			// Note: since we clear pool zero (and drop the lock) in the loop above but
+			// only reset
+			//       the counter here, it can happen that there was more entropy
+			//       injected into pool zero in the meantime. In that case, however, we
+			//       will only underestimate the true amount of entropy in the pool.
 			++reseedNumber_;
 			injectedIntoPoolZero_.store(0, std::memory_order_relaxed);
 		}
@@ -133,22 +138,24 @@ struct Fortuna {
 		cralgo::aes_secret_key ek, dk;
 		cralgo::aes256_key_schedule(keyBytes_, &ek, &dk);
 
-		auto generateBlock = [&] (uint8_t *block) {
+		auto generateBlock = [&](uint8_t *block) {
 			cralgo::aes256_encrypt(ctrBlock_, block, 1, &ek);
 
 			// Increment the counter.
 			for(int i = 0; i < blockSize; ++i) {
-				if(++ctrBlock_[i])
+				if(++ctrBlock_[i]) {
 					break;
+				}
 			}
 		};
 
 		auto p = reinterpret_cast<char *>(buffer);
 		size_t progress = 0;
 		while(progress < size) {
-			if(progress >= (1 << 20))
+			if(progress >= (1 << 20)) {
 				break;
-			size_t chunk = std::min(size - progress, size_t{blockSize});
+			}
+			size_t chunk = std::min(size - progress, size_t {blockSize});
 			uint8_t block[blockSize];
 			generateBlock(block);
 			memcpy(p + progress, block, chunk);
@@ -184,33 +191,39 @@ private:
 
 	// The remaining fields form the entropy accumulator.
 	Pool pools_[numPools];
-	std::atomic<size_t> injectedIntoPoolZero_{0};
+	std::atomic<size_t> injectedIntoPoolZero_ {0};
 };
 
 frg::manual_box<Fortuna> csprng;
 
-} // anonymous namespace
+}  // anonymous namespace
 
 void initializeRandom() {
 	csprng.initialize();
 
-	uint8_t seed[32]; // 256 bits of entropy should be enough.
+	uint8_t seed[32];  // 256 bits of entropy should be enough.
 	if(auto e = getEntropyFromCpu(seed, 32); e == Error::success) {
 		csprng->forceReseed(seed, 32);
 		return;
-	}else if(e == Error::noHardwareSupport) {
-		infoLogger() << "\e[31m" "thor: CPU-based hardware PRNG not available"
-				"\e[39m" << frg::endlog;
-	}else{
+	} else if(e == Error::noHardwareSupport) {
+		infoLogger() << "\e[31m"
+				"thor: CPU-based hardware PRNG not available"
+				"\e[39m"
+			     << frg::endlog;
+	} else {
 		assert(e == Error::hardwareBroken);
-		infoLogger() << "\e[31m" "thor: CPU-based hardware PRNG is broken"
-				"\e[39m" << frg::endlog;
+		infoLogger() << "\e[31m"
+				"thor: CPU-based hardware PRNG is broken"
+				"\e[39m"
+			     << frg::endlog;
 	}
 
 	// TODO: we can do something *much* better here, this case is highly insecure!
 	//       Use jitter-based entropy (e.g., HAVEGE) instead.
-	infoLogger() << "\e[31m" "thor: Falling back to entropy from CPU clock"
-			"\e[39m" << frg::endlog;
+	infoLogger() << "\e[31m"
+			"thor: Falling back to entropy from CPU clock"
+			"\e[39m"
+		     << frg::endlog;
 	uint64_t tsc = getRawTimestampCounter();
 	csprng->forceReseed(&tsc, sizeof(uint64_t));
 }
@@ -223,4 +236,4 @@ size_t generateRandomBytes(void *buffer, size_t size) {
 	return csprng->generate(buffer, size);
 }
 
-} // namespace thor
+}  // namespace thor

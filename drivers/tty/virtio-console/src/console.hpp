@@ -1,8 +1,7 @@
-#include <queue>
-#include <memory>
-
 #include <arch/dma_pool.hpp>
 #include <core/virtio/core.hpp>
+#include <memory>
+#include <queue>
 
 namespace tty {
 namespace virtio_console {
@@ -12,12 +11,11 @@ namespace virtio_console {
 // --------------------------------------------------------
 
 namespace spec::regs {
-	inline constexpr arch::scalar_register<uint16_t> cols{0};
-	inline constexpr arch::scalar_register<uint16_t> rows{2};
-	inline constexpr arch::scalar_register<uint32_t> maxPorts{4};
-	inline constexpr arch::scalar_register<uint32_t> emergencyWrite{8};
-}
-
+constexpr inline arch::scalar_register<uint16_t> cols {0};
+constexpr inline arch::scalar_register<uint16_t> rows {2};
+constexpr inline arch::scalar_register<uint32_t> maxPorts {4};
+constexpr inline arch::scalar_register<uint32_t> emergencyWrite {8};
+}  // namespace spec::regs
 
 // --------------------------------------------------------
 // Device
@@ -35,4 +33,5 @@ private:
 	virtio_core::Queue *txQueue_;
 };
 
-} } // namespace console::virtio_console
+}  // namespace virtio_console
+}  // namespace tty

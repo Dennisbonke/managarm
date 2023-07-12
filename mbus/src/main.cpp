@@ -1,22 +1,21 @@
 
+#include "mbus.pb.h"
+
+#include <algorithm>
 #include <assert.h>
+#include <async/result.hpp>
+#include <helix/ipc.hpp>
+#include <iostream>
+#include <memory>
+#include <queue>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/auxv.h>
-#include <algorithm>
-#include <iostream>
-#include <memory>
 #include <unordered_map>
 #include <unordered_set>
-#include <queue>
 #include <variant>
 #include <vector>
-
-#include <async/result.hpp>
-#include <helix/ipc.hpp>
-
-#include "mbus.pb.h"
 
 // --------------------------------------------------------
 // Entity
@@ -26,19 +25,20 @@ struct Group;
 struct Observer;
 
 struct Entity {
-	explicit Entity(int64_t id, std::weak_ptr<Group> parent,
-			std::unordered_map<std::string, std::string> properties)
-	: _id(id), _parent(std::move(parent)), _properties(std::move(properties)) { }
+	explicit Entity(
+		int64_t id,
+		std::weak_ptr<Group> parent,
+		std::unordered_map<std::string, std::string> properties
+	)
+	: _id(id)
+	, _parent(std::move(parent))
+	, _properties(std::move(properties)) {}
 
-	virtual ~Entity() { }
+	virtual ~Entity() {}
 
-	int64_t getId() const {
-		return _id;
-	}
+	int64_t getId() const { return _id; }
 
-	std::shared_ptr<Group> getParent() const {
-		return _parent.lock();
-	}
+	std::shared_ptr<Group> getParent() const { return _parent.lock(); }
 
 	const std::unordered_map<std::string, std::string> &getProperties() const {
 		return _properties;
@@ -51,17 +51,16 @@ private:
 };
 
 struct Group final : Entity {
-	explicit Group(int64_t id, std::weak_ptr<Group> parent,
-			std::unordered_map<std::string, std::string> properties)
-	: Entity(id, std::move(parent), std::move(properties)) { }
+	explicit Group(
+		int64_t id,
+		std::weak_ptr<Group> parent,
+		std::unordered_map<std::string, std::string> properties
+	)
+	: Entity(id, std::move(parent), std::move(properties)) {}
 
-	void addChild(std::shared_ptr<Entity> child) {
-		_children.insert(std::move(child));
-	}
+	void addChild(std::shared_ptr<Entity> child) { _children.insert(std::move(child)); }
 
-	const std::unordered_set<std::shared_ptr<Entity>> &getChildren() {
-		return _children;
-	}
+	const std::unordered_set<std::shared_ptr<Entity>> &getChildren() { return _children; }
 
 	void linkObserver(std::shared_ptr<Observer> observer) {
 		_observers.insert(std::move(observer));
@@ -75,11 +74,14 @@ private:
 };
 
 struct Object final : Entity {
-	explicit Object(int64_t id, std::weak_ptr<Group> parent,
-			std::unordered_map<std::string, std::string> properties,
-			helix::UniqueLane lane)
-	: Entity(id, std::move(parent), std::move(properties)),
-			_lane(std::move(lane)) { }
+	explicit Object(
+		int64_t id,
+		std::weak_ptr<Group> parent,
+		std::unordered_map<std::string, std::string> properties,
+		helix::UniqueLane lane
+	)
+	: Entity(id, std::move(parent), std::move(properties))
+	, _lane(std::move(lane)) {}
 
 	async::result<helix::UniqueDescriptor> bind();
 
@@ -98,11 +100,14 @@ async::result<helix::UniqueDescriptor> Object::bind() {
 
 	auto ser = req.SerializeAsString();
 	uint8_t buffer[128];
-	auto &&transmit = helix::submitAsync(_lane, helix::Dispatcher::global(),
-			helix::action(&offer, kHelItemAncillary),
-			helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
-			helix::action(&recv_resp, buffer, 128, kHelItemChain),
-			helix::action(&pull_desc));
+	auto &&transmit = helix::submitAsync(
+		_lane,
+		helix::Dispatcher::global(),
+		helix::action(&offer, kHelItemAncillary),
+		helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
+		helix::action(&recv_resp, buffer, 128, kHelItemChain),
+		helix::action(&pull_desc)
+	);
 	co_await transmit.async_wait();
 	HEL_CHECK(offer.error());
 	HEL_CHECK(send_req.error());
@@ -112,23 +117,22 @@ async::result<helix::UniqueDescriptor> Object::bind() {
 	managarm::mbus::CntResponse resp;
 	resp.ParseFromArray(buffer, recv_resp.actualLength());
 	assert(resp.error() == managarm::mbus::Error::SUCCESS);
-	
+
 	co_return pull_desc.descriptor();
 }
 
 struct EqualsFilter;
 struct Conjunction;
 
-using AnyFilter = std::variant<
-	EqualsFilter,
-	Conjunction
->;
+using AnyFilter = std::variant<EqualsFilter, Conjunction>;
 
 struct EqualsFilter {
 	explicit EqualsFilter(std::string property, std::string value)
-	: _property(std::move(property)), _value(std::move(value)) { }
+	: _property(std::move(property))
+	, _value(std::move(value)) {}
 
 	std::string getProperty() const { return _property; }
+
 	std::string getValue() const { return _value; }
 
 private:
@@ -137,12 +141,9 @@ private:
 };
 
 struct Conjunction {
-	explicit Conjunction(std::vector<AnyFilter> operands)
-	: _operands(std::move(operands)) { }
+	explicit Conjunction(std::vector<AnyFilter> operands) : _operands(std::move(operands)) {}
 
-	const std::vector<AnyFilter> &getOperands() const {
-		return _operands;
-	}
+	const std::vector<AnyFilter> &getOperands() const { return _operands; }
 
 private:
 	std::vector<AnyFilter> _operands;
@@ -150,7 +151,8 @@ private:
 
 struct Observer {
 	explicit Observer(AnyFilter filter, helix::UniqueLane lane)
-	: _filter(std::move(filter)), _lane(std::move(lane)) { }
+	: _filter(std::move(filter))
+	, _lane(std::move(lane)) {}
 
 	async::detached traverse(std::shared_ptr<Entity> root);
 
@@ -165,22 +167,24 @@ static bool matchesFilter(const Entity *entity, const AnyFilter &filter) {
 	if(auto real = std::get_if<EqualsFilter>(&filter); real) {
 		auto &properties = entity->getProperties();
 		auto it = properties.find(real->getProperty());
-		if(it == properties.end())
+		if(it == properties.end()) {
 			return false;
+		}
 		return it->second == real->getValue();
-	}else if(auto real = std::get_if<Conjunction>(&filter); real) {
+	} else if(auto real = std::get_if<Conjunction>(&filter); real) {
 		auto &operands = real->getOperands();
-		return std::all_of(operands.begin(), operands.end(), [&] (const AnyFilter &operand) {
+		return std::all_of(operands.begin(), operands.end(), [&](const AnyFilter &operand) {
 			return matchesFilter(entity, operand);
 		});
-	}else{
+	} else {
 		throw std::runtime_error("Unexpected filter");
 	}
 }
-	
+
 void Group::processAttach(std::shared_ptr<Entity> entity) {
-	for(auto &observer_ptr : _observers)
+	for(auto &observer_ptr : _observers) {
 		observer_ptr->onAttach(entity);
+	}
 }
 
 async::detached Observer::traverse(std::shared_ptr<Entity> root) {
@@ -191,13 +195,15 @@ async::detached Observer::traverse(std::shared_ptr<Entity> root) {
 		entities.pop();
 		if(const Entity &er = *entity; typeid(er) == typeid(Group)) {
 			auto group = std::static_pointer_cast<Group>(entity);
-			for(auto child : group->getChildren())
+			for(auto child : group->getChildren()) {
 				entities.push(std::move(child));
+			}
 		}
 
-		if(!matchesFilter(entity.get(), _filter)) 
+		if(!matchesFilter(entity.get(), _filter)) {
 			continue;
-		
+		}
+
 		helix::SendBuffer send_req;
 
 		managarm::mbus::SvrRequest req;
@@ -210,17 +216,21 @@ async::detached Observer::traverse(std::shared_ptr<Entity> root) {
 		}
 
 		auto ser = req.SerializeAsString();
-		auto &&transmit = helix::submitAsync(_lane, helix::Dispatcher::global(),
-				helix::action(&send_req, ser.data(), ser.size()));
+		auto &&transmit = helix::submitAsync(
+			_lane,
+			helix::Dispatcher::global(),
+			helix::action(&send_req, ser.data(), ser.size())
+		);
 		co_await transmit.async_wait();
 		HEL_CHECK(send_req.error());
 	}
 }
 
 async::detached Observer::onAttach(std::shared_ptr<Entity> entity) {
-	if(!matchesFilter(entity.get(), _filter)) 
+	if(!matchesFilter(entity.get(), _filter)) {
 		co_return;
-	
+	}
+
 	helix::SendBuffer send_req;
 
 	managarm::mbus::SvrRequest req;
@@ -233,8 +243,11 @@ async::detached Observer::onAttach(std::shared_ptr<Entity> entity) {
 	}
 
 	auto ser = req.SerializeAsString();
-	auto &&transmit = helix::submitAsync(_lane, helix::Dispatcher::global(),
-			helix::action(&send_req, ser.data(), ser.size()));
+	auto &&transmit = helix::submitAsync(
+		_lane,
+		helix::Dispatcher::global(),
+		helix::action(&send_req, ser.data(), ser.size())
+	);
 	co_await transmit.async_wait();
 	HEL_CHECK(send_req.error());
 }
@@ -244,21 +257,25 @@ int64_t nextEntityId = 1;
 
 std::shared_ptr<Entity> getEntityById(int64_t id) {
 	auto it = allEntities.find(id);
-	if(it == allEntities.end())
+	if(it == allEntities.end()) {
 		return nullptr;
+	}
 	return it->second;
 }
 
 static AnyFilter decodeFilter(const managarm::mbus::AnyFilter &proto_filter) {
 	if(proto_filter.type_case() == managarm::mbus::AnyFilter::kEqualsFilter) {
-		return EqualsFilter(proto_filter.equals_filter().path(),
-				proto_filter.equals_filter().value());
-	}else if(proto_filter.type_case() == managarm::mbus::AnyFilter::kConjunction) {
+		return EqualsFilter(
+			proto_filter.equals_filter().path(),
+			proto_filter.equals_filter().value()
+		);
+	} else if(proto_filter.type_case() == managarm::mbus::AnyFilter::kConjunction) {
 		std::vector<AnyFilter> operands;
-		for(auto &proto_operand : proto_filter.conjunction().operands())
+		for(auto &proto_operand : proto_filter.conjunction().operands()) {
 			operands.push_back(decodeFilter(proto_operand));
+		}
 		return Conjunction(std::move(operands));
-	}else{
+	} else {
 		throw std::runtime_error("Unexpected filter message");
 	}
 }
@@ -269,13 +286,16 @@ async::detached serve(helix::UniqueLane lane) {
 		helix::RecvBuffer recv_req;
 
 		char buffer[1024];
-		auto &&header = helix::submitAsync(lane, helix::Dispatcher::global(),
-				helix::action(&accept, kHelItemAncillary),
-				helix::action(&recv_req, buffer, 1024));
+		auto &&header = helix::submitAsync(
+			lane,
+			helix::Dispatcher::global(),
+			helix::action(&accept, kHelItemAncillary),
+			helix::action(&recv_req, buffer, 1024)
+		);
 		co_await header.async_wait();
 		HEL_CHECK(accept.error());
 		HEL_CHECK(recv_req.error());
-		
+
 		auto conversation = accept.descriptor();
 
 		managarm::mbus::CntRequest req;
@@ -288,11 +308,14 @@ async::detached serve(helix::UniqueLane lane) {
 			resp.set_id(1);
 
 			auto ser = resp.SerializeAsString();
-			auto &&transmit = helix::submitAsync(conversation, helix::Dispatcher::global(),
-					helix::action(&send_resp, ser.data(), ser.size()));
+			auto &&transmit = helix::submitAsync(
+				conversation,
+				helix::Dispatcher::global(),
+				helix::action(&send_resp, ser.data(), ser.size())
+			);
 			co_await transmit.async_wait();
 			HEL_CHECK(send_resp.error());
-		}else if(req.req_type() == managarm::mbus::CntReqType::GET_PROPERTIES) {
+		} else if(req.req_type() == managarm::mbus::CntReqType::GET_PROPERTIES) {
 			helix::SendBuffer send_resp;
 
 			auto entity = getEntityById(req.id());
@@ -301,8 +324,11 @@ async::detached serve(helix::UniqueLane lane) {
 				resp.set_error(managarm::mbus::Error::NO_SUCH_ENTITY);
 
 				auto ser = resp.SerializeAsString();
-				auto &&transmit = helix::submitAsync(conversation, helix::Dispatcher::global(),
-						helix::action(&send_resp, ser.data(), ser.size()));
+				auto &&transmit = helix::submitAsync(
+					conversation,
+					helix::Dispatcher::global(),
+					helix::action(&send_resp, ser.data(), ser.size())
+				);
 				co_await transmit.async_wait();
 				HEL_CHECK(send_resp.error());
 				continue;
@@ -317,11 +343,14 @@ async::detached serve(helix::UniqueLane lane) {
 			}
 
 			auto ser = resp.SerializeAsString();
-			auto &&transmit = helix::submitAsync(conversation, helix::Dispatcher::global(),
-					helix::action(&send_resp, ser.data(), ser.size()));
+			auto &&transmit = helix::submitAsync(
+				conversation,
+				helix::Dispatcher::global(),
+				helix::action(&send_resp, ser.data(), ser.size())
+			);
 			co_await transmit.async_wait();
 			HEL_CHECK(send_resp.error());
-		}else if(req.req_type() == managarm::mbus::CntReqType::CREATE_OBJECT) {
+		} else if(req.req_type() == managarm::mbus::CntReqType::CREATE_OBJECT) {
 			helix::SendBuffer send_resp;
 			helix::PushDescriptor send_lane;
 
@@ -331,28 +360,37 @@ async::detached serve(helix::UniqueLane lane) {
 				resp.set_error(managarm::mbus::Error::NO_SUCH_ENTITY);
 
 				auto ser = resp.SerializeAsString();
-				auto &&transmit = helix::submitAsync(conversation, helix::Dispatcher::global(),
-						helix::action(&send_resp, ser.data(), ser.size()));
+				auto &&transmit = helix::submitAsync(
+					conversation,
+					helix::Dispatcher::global(),
+					helix::action(&send_resp, ser.data(), ser.size())
+				);
 				co_await transmit.async_wait();
 				HEL_CHECK(send_resp.error());
 				continue;
 			}
 
-			if(const Entity &pr = *parent; typeid(pr) != typeid(Group))
-				throw std::runtime_error("Objects can only be created inside groups");
+			if(const Entity &pr = *parent; typeid(pr) != typeid(Group)) {
+				throw std::runtime_error("Objects can only be created inside groups"
+				);
+			}
 			auto group = std::static_pointer_cast<Group>(parent);
 
 			std::unordered_map<std::string, std::string> properties;
 			for(auto &kv : req.properties()) {
 				assert(kv.has_item() && kv.item().has_string_item());
-				properties.insert({ kv.name(), kv.item().string_item().value() });
+				properties.insert({kv.name(), kv.item().string_item().value()});
 			}
 
 			helix::UniqueLane local_lane, remote_lane;
 			std::tie(local_lane, remote_lane) = helix::createStream();
-			auto child = std::make_shared<Object>(nextEntityId++,
-					group, std::move(properties), std::move(local_lane));
-			allEntities.insert({ child->getId(), child });
+			auto child = std::make_shared<Object>(
+				nextEntityId++,
+				group,
+				std::move(properties),
+				std::move(local_lane)
+			);
+			allEntities.insert({child->getId(), child});
 
 			group->addChild(child);
 
@@ -368,13 +406,16 @@ async::detached serve(helix::UniqueLane lane) {
 			resp.set_id(child->getId());
 
 			auto ser = resp.SerializeAsString();
-			auto &&transmit = helix::submitAsync(conversation, helix::Dispatcher::global(),
-					helix::action(&send_resp, ser.data(), ser.size(), kHelItemChain),
-					helix::action(&send_lane, remote_lane));
+			auto &&transmit = helix::submitAsync(
+				conversation,
+				helix::Dispatcher::global(),
+				helix::action(&send_resp, ser.data(), ser.size(), kHelItemChain),
+				helix::action(&send_lane, remote_lane)
+			);
 			co_await transmit.async_wait();
 			HEL_CHECK(send_resp.error());
 			HEL_CHECK(send_lane.error());
-		}else if(req.req_type() == managarm::mbus::CntReqType::LINK_OBSERVER) {
+		} else if(req.req_type() == managarm::mbus::CntReqType::LINK_OBSERVER) {
 			helix::SendBuffer send_resp;
 			helix::PushDescriptor send_lane;
 
@@ -384,21 +425,28 @@ async::detached serve(helix::UniqueLane lane) {
 				resp.set_error(managarm::mbus::Error::NO_SUCH_ENTITY);
 
 				auto ser = resp.SerializeAsString();
-				auto &&transmit = helix::submitAsync(conversation, helix::Dispatcher::global(),
-						helix::action(&send_resp, ser.data(), ser.size()));
+				auto &&transmit = helix::submitAsync(
+					conversation,
+					helix::Dispatcher::global(),
+					helix::action(&send_resp, ser.data(), ser.size())
+				);
 				co_await transmit.async_wait();
 				HEL_CHECK(send_resp.error());
 				continue;
 			}
 
-			if(const Entity &pr = *parent; typeid(pr) != typeid(Group))
-				throw std::runtime_error("Observers can only be attached to groups");
+			if(const Entity &pr = *parent; typeid(pr) != typeid(Group)) {
+				throw std::runtime_error("Observers can only be attached to groups"
+				);
+			}
 			auto group = std::static_pointer_cast<Group>(parent);
 
 			helix::UniqueLane local_lane, remote_lane;
 			std::tie(local_lane, remote_lane) = helix::createStream();
-			auto observer = std::make_shared<Observer>(decodeFilter(req.filter()),
-					std::move(local_lane));
+			auto observer = std::make_shared<Observer>(
+				decodeFilter(req.filter()),
+				std::move(local_lane)
+			);
 			group->linkObserver(observer);
 
 			observer->traverse(parent);
@@ -407,13 +455,16 @@ async::detached serve(helix::UniqueLane lane) {
 			resp.set_error(managarm::mbus::Error::SUCCESS);
 
 			auto ser = resp.SerializeAsString();
-			auto &&transmit = helix::submitAsync(conversation, helix::Dispatcher::global(),
-					helix::action(&send_resp, ser.data(), ser.size(), kHelItemChain),
-					helix::action(&send_lane, remote_lane));
+			auto &&transmit = helix::submitAsync(
+				conversation,
+				helix::Dispatcher::global(),
+				helix::action(&send_resp, ser.data(), ser.size(), kHelItemChain),
+				helix::action(&send_lane, remote_lane)
+			);
 			co_await transmit.async_wait();
 			HEL_CHECK(send_resp.error());
 			HEL_CHECK(send_lane.error());
-		}else if(req.req_type() == managarm::mbus::CntReqType::BIND2) {
+		} else if(req.req_type() == managarm::mbus::CntReqType::BIND2) {
 			helix::SendBuffer send_resp;
 			helix::PushDescriptor send_desc;
 
@@ -423,30 +474,37 @@ async::detached serve(helix::UniqueLane lane) {
 				resp.set_error(managarm::mbus::Error::NO_SUCH_ENTITY);
 
 				auto ser = resp.SerializeAsString();
-				auto &&transmit = helix::submitAsync(conversation, helix::Dispatcher::global(),
-						helix::action(&send_resp, ser.data(), ser.size()));
+				auto &&transmit = helix::submitAsync(
+					conversation,
+					helix::Dispatcher::global(),
+					helix::action(&send_resp, ser.data(), ser.size())
+				);
 				co_await transmit.async_wait();
 				HEL_CHECK(send_resp.error());
 				continue;
 			}
 
-			if(const Entity &er = *entity; typeid(er) != typeid(Object))
+			if(const Entity &er = *entity; typeid(er) != typeid(Object)) {
 				throw std::runtime_error("Bind can only be invoked on objects");
+			}
 			auto object = std::static_pointer_cast<Object>(entity);
 
 			auto descriptor = co_await object->bind();
-			
+
 			managarm::mbus::SvrResponse resp;
 			resp.set_error(managarm::mbus::Error::SUCCESS);
 
 			auto ser = resp.SerializeAsString();
-			auto &&transmit = helix::submitAsync(conversation, helix::Dispatcher::global(),
-					helix::action(&send_resp, ser.data(), ser.size(), kHelItemChain),
-					helix::action(&send_desc, descriptor));
+			auto &&transmit = helix::submitAsync(
+				conversation,
+				helix::Dispatcher::global(),
+				helix::action(&send_resp, ser.data(), ser.size(), kHelItemChain),
+				helix::action(&send_desc, descriptor)
+			);
 			co_await transmit.async_wait();
 			HEL_CHECK(send_resp.error());
 			HEL_CHECK(send_desc.error());
-		}else{
+		} else {
 			throw std::runtime_error("Unexpected request type");
 		}
 	}
@@ -459,15 +517,18 @@ async::detached serve(helix::UniqueLane lane) {
 int main() {
 	std::cout << "Entering mbus" << std::endl;
 
-	auto root = std::make_shared<Group>(nextEntityId++, std::weak_ptr<Group>(),
-			std::unordered_map<std::string, std::string>());
-	allEntities.insert({ root->getId(), root });
+	auto root = std::make_shared<Group>(
+		nextEntityId++,
+		std::weak_ptr<Group>(),
+		std::unordered_map<std::string, std::string>()
+	);
+	allEntities.insert({root->getId(), root});
 
 	unsigned long xpipe;
-	if(peekauxval(AT_XPIPE, &xpipe))
+	if(peekauxval(AT_XPIPE, &xpipe)) {
 		throw std::runtime_error("No AT_XPIPE specified");
+	}
 
 	serve(helix::UniqueLane(xpipe));
 	async::run_forever(helix::currentDispatcher);
 }
-

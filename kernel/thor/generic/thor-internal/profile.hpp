@@ -9,4 +9,4 @@ extern bool wantKernelProfile;
 void initializeProfile();
 LogRingBuffer *getGlobalProfileRing();
 
-} // namespace thor
+}  // namespace thor

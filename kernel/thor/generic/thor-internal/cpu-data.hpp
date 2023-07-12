@@ -23,7 +23,7 @@ struct CpuData : public PlatformCpuData {
 
 	CpuData(const CpuData &) = delete;
 
-	CpuData &operator= (const CpuData &) = delete;
+	CpuData &operator=(const CpuData &) = delete;
 
 	IrqMutex irqMutex;
 	UniqueKernelStack detachedStack;
@@ -40,7 +40,7 @@ struct CpuData : public PlatformCpuData {
 	std::atomic<uint64_t> heartbeat;
 
 	unsigned int irqEntropySeq = 0;
-	std::atomic<ProfileMechanism> profileMechanism{};
+	std::atomic<ProfileMechanism> profileMechanism {};
 	// TODO: This should be a unique_ptr instead.
 	SingleContextRecordRing *localProfileRing = nullptr;
 };
@@ -60,4 +60,4 @@ inline ExecutorContext *currentExecutorContext() {
 	return getCpuData()->executorContext;
 }
 
-} // namespace thor
+}  // namespace thor

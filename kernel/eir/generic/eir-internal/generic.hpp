@@ -1,11 +1,11 @@
 #pragma once
 
-#include <stdint.h>
-#include <stddef.h>
 #include <eir-internal/arch/types.hpp>
-#include <frg/string.hpp>
-#include <frg/span.hpp>
 #include <eir/interface.hpp>
+#include <frg/span.hpp>
+#include <frg/string.hpp>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace eir {
 
@@ -27,7 +27,7 @@ struct Region {
 	address_t buddyMap;
 };
 
-static constexpr size_t numRegions = 64;
+constexpr static size_t numRegions = 64;
 extern Region regions[numRegions];
 extern address_t allocatedMemory;
 
@@ -59,9 +59,10 @@ void setFbInfo(void *ptr, int width, int height, size_t pitch);
 template<typename T>
 T *bootAlloc(size_t n = 1) {
 	auto pointer = reinterpret_cast<T *>(bootReserve(sizeof(T) * n, alignof(T)));
-	for(size_t i = 0; i < n; i++)
-		new (&pointer[i]) T();
+	for(size_t i = 0; i < n; i++) {
+		new(&pointer[i]) T();
+	}
 	return pointer;
 }
 
-} // namespace eir
+}  // namespace eir

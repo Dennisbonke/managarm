@@ -1,11 +1,10 @@
 #pragma once
 
-#include <stddef.h>
-#include <stdint.h>
-
 #include <frg/list.hpp>
 #include <frg/pairing_heap.hpp>
 #include <frg/spinlock.hpp>
+#include <stddef.h>
+#include <stdint.h>
 
 namespace thor {
 
@@ -39,23 +38,19 @@ struct ScheduleEntity {
 
 	ScheduleEntity(const ScheduleEntity &) = delete;
 
-	ScheduleEntity &operator= (const ScheduleEntity &) = delete;
+	ScheduleEntity &operator=(const ScheduleEntity &) = delete;
 
 protected:
 	~ScheduleEntity();
 
 public:
-	ScheduleType type() const {
-		return type_;
-	}
+	ScheduleType type() const { return type_; }
 
-	[[ noreturn ]] virtual void invoke() = 0;
+	[[noreturn]] virtual void invoke() = 0;
 
 	virtual void handlePreemption(IrqImageAccessor image) = 0;
 
-	uint64_t runTime() {
-		return _runTime;
-	}
+	uint64_t runTime() { return _runTime; }
 
 private:
 	const ScheduleType type_;
@@ -81,9 +76,10 @@ private:
 };
 
 struct ScheduleGreater {
-	bool operator() (const ScheduleEntity *a, const ScheduleEntity *b) {
-		if(int po = ScheduleEntity::orderPriority(a, b); po)
+	bool operator()(const ScheduleEntity *a, const ScheduleEntity *b) {
+		if(int po = ScheduleEntity::orderPriority(a, b); po) {
 			return po > 0;
+		}
 		return !ScheduleEntity::scheduleBefore(a, b);
 	}
 };
@@ -105,7 +101,7 @@ struct Scheduler {
 
 	Scheduler(const Scheduler &) = delete;
 
-	Scheduler &operator= (const Scheduler &) = delete;
+	Scheduler &operator=(const Scheduler &) = delete;
 
 private:
 	Progress _liveUnfairness(const ScheduleEntity *entity);
@@ -144,10 +140,9 @@ private:
 		frg::locate_member<
 			ScheduleEntity,
 			frg::pairing_heap_hook<ScheduleEntity>,
-			&ScheduleEntity::heapHook
-		>,
-		ScheduleGreater
-	> _waitQueue;
+			&ScheduleEntity::heapHook>,
+		ScheduleGreater>
+		_waitQueue;
 
 	size_t _numWaiting = 0;
 
@@ -174,11 +169,10 @@ private:
 		frg::locate_member<
 			ScheduleEntity,
 			frg::default_list_hook<ScheduleEntity>,
-			&ScheduleEntity::listHook
-		>
-	> _pendingList;
+			&ScheduleEntity::listHook>>
+		_pendingList;
 };
 
 Scheduler *localScheduler();
 
-} // namespace thor
+}  // namespace thor

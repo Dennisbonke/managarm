@@ -13,4 +13,4 @@ unsigned long strtoul(const char *__restrict, char **__restrict, int);
 }
 #endif
 
-#endif // THOR_LIBC_STDLIB_H
+#endif  // THOR_LIBC_STDLIB_H

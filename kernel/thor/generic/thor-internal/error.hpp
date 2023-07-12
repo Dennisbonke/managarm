@@ -26,4 +26,4 @@ enum class Error {
 	spuriousOperation
 };
 
-} // namespace thor
+}  // namespace thor

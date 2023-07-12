@@ -6,4 +6,4 @@ void initializeIntelPmc();
 void setIntelPmc();
 bool checkIntelPmcOverflow();
 
-} // namespace thor
+}  // namespace thor

@@ -6,4 +6,4 @@ namespace block_subsystem {
 
 async::detached run();
 
-} // namespace block_subsystem
+}  // namespace block_subsystem

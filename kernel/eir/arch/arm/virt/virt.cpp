@@ -1,14 +1,15 @@
-#include <stdint.h>
-#include <assert.h>
-#include <eir-internal/debug.hpp>
-#include <eir/interface.hpp>
-#include <render-text.hpp>
-#include <dtb.hpp>
 #include "../cpio.hpp"
-#include <frg/manual_box.hpp>
+
+#include <assert.h>
+#include <dtb.hpp>
 #include <eir-internal/arch.hpp>
-#include <eir-internal/generic.hpp>
 #include <eir-internal/arch/pl011.hpp>
+#include <eir-internal/debug.hpp>
+#include <eir-internal/generic.hpp>
+#include <eir/interface.hpp>
+#include <frg/manual_box.hpp>
+#include <render-text.hpp>
+#include <stdint.h>
 
 namespace eir {
 
@@ -24,10 +25,10 @@ extern "C" void eirVirtMain(uintptr_t deviceTreePtr) {
 
 	initProcessorEarly();
 
-	DeviceTree dt{reinterpret_cast<void *>(deviceTreePtr)};
+	DeviceTree dt {reinterpret_cast<void *>(deviceTreePtr)};
 
 	eir::infoLogger() << "DTB pointer " << dt.data() << frg::endlog;
-	eir::infoLogger() << "DTB size: 0x" << frg::hex_fmt{dt.size()} << frg::endlog;
+	eir::infoLogger() << "DTB size: 0x" << frg::hex_fmt {dt.size()} << frg::endlog;
 
 	DeviceTreeNode chosenNode;
 	bool hasChosenNode = false;
@@ -38,10 +39,10 @@ extern "C" void eirVirtMain(uintptr_t deviceTreePtr) {
 	dt.rootNode().discoverSubnodes(
 		[](DeviceTreeNode &node) {
 			return !memcmp("memory@", node.name(), 7)
-				|| !memcmp("chosen", node.name(), 7);
+			    || !memcmp("chosen", node.name(), 7);
 		},
 		[&](DeviceTreeNode node) {
-			if (!memcmp("chosen", node.name(), 7)) {
+			if(!memcmp("chosen", node.name(), 7)) {
 				assert(!hasChosenNode);
 
 				chosenNode = node;
@@ -52,14 +53,15 @@ extern "C" void eirVirtMain(uintptr_t deviceTreePtr) {
 				memoryNodes[nMemoryNodes++] = node;
 			}
 			infoLogger() << "Node \"" << node.name() << "\" discovered" << frg::endlog;
-		});
+		}
+	);
 
 	uint32_t addressCells = 2, sizeCells = 1;
 
-	for (auto prop : dt.rootNode().properties()) {
-		if (!memcmp("#address-cells", prop.name(), 15)) {
+	for(auto prop : dt.rootNode().properties()) {
+		if(!memcmp("#address-cells", prop.name(), 15)) {
 			addressCells = prop.asU32();
-		} else if (!memcmp("#size-cells", prop.name(), 12)) {
+		} else if(!memcmp("#size-cells", prop.name(), 12)) {
 			sizeCells = prop.asU32();
 		}
 	}
@@ -70,10 +72,10 @@ extern "C" void eirVirtMain(uintptr_t deviceTreePtr) {
 	size_t nReservedRegions = 0;
 
 	eir::infoLogger() << "Memory reservation entries:" << frg::endlog;
-	for (auto ent : dt.memoryReservations()) {
-		eir::infoLogger() << "At 0x" << frg::hex_fmt{ent.address}
-			<< ", ends at 0x" << frg::hex_fmt{ent.address + ent.size}
-			<< " (0x" << frg::hex_fmt{ent.size} << " bytes)" << frg::endlog;
+	for(auto ent : dt.memoryReservations()) {
+		eir::infoLogger() << "At 0x" << frg::hex_fmt {ent.address} << ", ends at 0x"
+				  << frg::hex_fmt {ent.address + ent.size} << " (0x"
+				  << frg::hex_fmt {ent.size} << " bytes)" << frg::endlog;
 
 		reservedRegions[nReservedRegions++] = {ent.address, ent.size};
 	}
@@ -84,34 +86,35 @@ extern "C" void eirVirtMain(uintptr_t deviceTreePtr) {
 	reservedRegions[nReservedRegions++] = {eirStart, eirEnd - eirStart};
 
 	uintptr_t initrd = 0;
-	if (auto p = chosenNode.findProperty("linux,initrd-start"); p) {
-		if (p->size() == 4)
+	if(auto p = chosenNode.findProperty("linux,initrd-start"); p) {
+		if(p->size() == 4) {
 			initrd = p->asU32();
-		else if (p->size() == 8)
+		} else if(p->size() == 8) {
 			initrd = p->asU64();
-		else
+		} else {
 			assert(!"Invalid linux,initrd-start size");
+		}
 
-		eir::infoLogger() << "Initrd is at " << (void *)initrd << frg::endlog;
+		eir::infoLogger() << "Initrd is at " << (void *) initrd << frg::endlog;
 	} else {
 		initrd = 0x48000000;
-		eir::infoLogger() << "Assuming initrd is at " << (void *)initrd << frg::endlog;
+		eir::infoLogger() << "Assuming initrd is at " << (void *) initrd << frg::endlog;
 	}
 
-	CpioRange cpio_range{reinterpret_cast<void *>(initrd)};
+	CpioRange cpio_range {reinterpret_cast<void *>(initrd)};
 
 	auto initrd_end = reinterpret_cast<uintptr_t>(cpio_range.eof());
-	eir::infoLogger() << "Initrd ends at " << (void *)initrd_end << frg::endlog;
+	eir::infoLogger() << "Initrd ends at " << (void *) initrd_end << frg::endlog;
 
 	reservedRegions[nReservedRegions++] = {initrd, initrd_end - initrd};
 	reservedRegions[nReservedRegions++] = {deviceTreePtr, dt.size()};
 
-	for (int i = 0; i < nMemoryNodes; i++) {
+	for(int i = 0; i < nMemoryNodes; i++) {
 		auto reg = memoryNodes[i].findProperty("reg");
 		assert(reg);
 
 		size_t j = 0;
-		while (j < reg->size()) {
+		while(j < reg->size()) {
 			auto base = reg->asPropArrayEntry(addressCells, j);
 			j += addressCells * 4;
 
@@ -126,21 +129,24 @@ extern "C" void eirVirtMain(uintptr_t deviceTreePtr) {
 
 	eir::infoLogger() << "Kernel memory regions:" << frg::endlog;
 	for(size_t i = 0; i < numRegions; ++i) {
-		if(regions[i].regionType == RegionType::null)
+		if(regions[i].regionType == RegionType::null) {
 			continue;
+		}
 		eir::infoLogger() << "    Memory region [" << i << "]."
-				<< " Base: 0x" << frg::hex_fmt{regions[i].address}
-				<< ", length: 0x" << frg::hex_fmt{regions[i].size} << frg::endlog;
-		if(regions[i].regionType == RegionType::allocatable)
-			eir::infoLogger() << "        Buddy tree at 0x" << frg::hex_fmt{regions[i].buddyTree}
-					<< ", overhead: 0x" << frg::hex_fmt{regions[i].buddyOverhead}
-					<< frg::endlog;
+				  << " Base: 0x" << frg::hex_fmt {regions[i].address}
+				  << ", length: 0x" << frg::hex_fmt {regions[i].size}
+				  << frg::endlog;
+		if(regions[i].regionType == RegionType::allocatable) {
+			eir::infoLogger() << "        Buddy tree at 0x"
+					  << frg::hex_fmt {regions[i].buddyTree} << ", overhead: 0x"
+					  << frg::hex_fmt {regions[i].buddyOverhead} << frg::endlog;
+		}
 	}
 
-	frg::span<uint8_t> kernel_image{nullptr, 0};
+	frg::span<uint8_t> kernel_image {nullptr, 0};
 
-	for (auto entry : cpio_range) {
-		if (entry.name == "thor") {
+	for(auto entry : cpio_range) {
+		if(entry.name == "thor") {
 			kernel_image = entry.data;
 		}
 	}
@@ -151,7 +157,7 @@ extern "C" void eirVirtMain(uintptr_t deviceTreePtr) {
 	initProcessorPaging(kernel_image.data(), kernel_entry);
 
 	const char *cmdline = "";
-	if (auto p = chosenNode.findProperty("bootargs"); p) {
+	if(auto p = chosenNode.findProperty("bootargs"); p) {
 		cmdline = static_cast<const char *>(p->data());
 	}
 
@@ -174,17 +180,22 @@ extern "C" void eirVirtMain(uintptr_t deviceTreePtr) {
 
 	info_ptr->debugFlags |= eirDebugSerial;
 
-	mapSingle4kPage(0xFFFF'0000'0000'0000, 0x9000000,
-			PageFlags::write, CachingMode::mmio);
+	mapSingle4kPage(0xFFFF'0000'0000'0000, 0x9000000, PageFlags::write, CachingMode::mmio);
 	mapKasanShadow(0xFFFF'0000'0000'0000, 0x1000);
 	unpoisonKasanShadow(0xFFFF'0000'0000'0000, 0x1000);
 
 	eir::infoLogger() << "Leaving Eir and entering the real kernel" << frg::endlog;
 
-	eirEnterKernel(eirTTBR[0] + 1, eirTTBR[1] + 1, kernel_entry,
-			0xFFFF'FE80'0001'0000, 0xFFFF'FE80'0001'0000);
+	eirEnterKernel(
+		eirTTBR[0] + 1,
+		eirTTBR[1] + 1,
+		kernel_entry,
+		0xFFFF'FE80'0001'0000,
+		0xFFFF'FE80'0001'0000
+	);
 
-	while(true);
+	while(true)
+		;
 }
 
-} // namespace eir
+}  // namespace eir

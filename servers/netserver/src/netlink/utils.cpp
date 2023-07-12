@@ -37,4 +37,4 @@ void NetlinkSocket::sendError(struct nlmsghdr *hdr, int err) {
 	_recvQueue.push_back(b.packet());
 }
 
-} // namespace nl
+}  // namespace nl

@@ -1,14 +1,13 @@
 #pragma once
 
-#include <string.h>
-
 #include <hel.h>
 #include <helix/ipc.hpp>
+#include <string.h>
 
 namespace helix {
 
 struct Mapping {
-	static constexpr size_t pageSize = 0x1000;
+	constexpr static size_t pageSize = 0x1000;
 
 	friend void swap(Mapping &x, Mapping &y) {
 		using std::swap;
@@ -17,27 +16,32 @@ struct Mapping {
 		swap(x._size, y._size);
 	}
 
-	Mapping()
-	: _window{nullptr}, _offset{0}, _size{0} { }
+	Mapping() : _window {nullptr}, _offset {0}, _size {0} {}
 
 	Mapping(helix::BorrowedDescriptor memory, ptrdiff_t offset, size_t size)
-	: Mapping{memory, offset, size, kHelMapProtRead | kHelMapProtWrite} { }
+	: Mapping {memory, offset, size, kHelMapProtRead | kHelMapProtWrite} {}
 
 	Mapping(helix::BorrowedDescriptor memory, ptrdiff_t offset, size_t size, uint32_t flags)
-	: _window{nullptr}, _offset{offset}, _size{size} {
-		if(_size)
-			HEL_CHECK(helMapMemory(memory.getHandle(), kHelNullHandle,
-					nullptr, _offset & ~(pageSize - 1),
-					((_offset & (pageSize - 1)) + _size + (pageSize - 1)) & ~(pageSize - 1),
-					flags, &_window));
+	: _window {nullptr}
+	, _offset {offset}
+	, _size {size} {
+		if(_size) {
+			HEL_CHECK(helMapMemory(
+				memory.getHandle(),
+				kHelNullHandle,
+				nullptr,
+				_offset & ~(pageSize - 1),
+				((_offset & (pageSize - 1)) + _size + (pageSize - 1))
+					& ~(pageSize - 1),
+				flags,
+				&_window
+			));
+		}
 	}
 
 	Mapping(const Mapping &) = delete;
 
-	Mapping(Mapping &&other)
-	: Mapping() {
-		swap(*this, other);
-	}
+	Mapping(Mapping &&other) : Mapping() { swap(*this, other); }
 
 	~Mapping() {
 		if(_window) {
@@ -46,21 +50,18 @@ struct Mapping {
 		}
 	}
 
-	Mapping &operator= (Mapping other) {
+	Mapping &operator=(Mapping other) {
 		swap(*this, other);
 		return *this;
 	}
 
-	explicit operator bool () {
-		return _window;
-	}
+	explicit operator bool() { return _window; }
 
 	ptrdiff_t offset() { return _offset; }
+
 	size_t size() { return _size; }
 
-	void *get() {
-		return reinterpret_cast<char *>(_window) + (_offset & (pageSize - 1));
-	}
+	void *get() { return reinterpret_cast<char *>(_window) + (_offset & (pageSize - 1)); }
 
 private:
 	void *_window;
@@ -81,4 +82,4 @@ inline uintptr_t addressToPhysical(uintptr_t p) {
 	return phys;
 }
 
-} // namespace helix
+}  // namespace helix

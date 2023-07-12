@@ -1,12 +1,12 @@
 
+#include "timerfd.hpp"
+
+#include <async/recurring-event.hpp>
+#include <async/result.hpp>
+#include <helix/ipc.hpp>
+#include <iostream>
 #include <string.h>
 #include <sys/epoll.h>
-#include <iostream>
-
-#include <async/result.hpp>
-#include <async/recurring-event.hpp>
-#include <helix/ipc.hpp>
-#include "timerfd.hpp"
 
 namespace {
 
@@ -19,18 +19,21 @@ private:
 		uint64_t initial;
 		uint64_t interval;
 	};
-	
+
 	async::detached arm(Timer *timer) {
 		assert(timer->initial || timer->interval);
-//		std::cout << "posix: Timer armed" << std::endl;
+		//		std::cout << "posix: Timer armed" << std::endl;
 
 		uint64_t tick;
 		HEL_CHECK(helGetClock(&tick));
 
 		if(timer->initial) {
 			helix::AwaitClock await_initial;
-			auto &&submit = helix::submitAwaitClock(&await_initial, tick + timer->initial,
-					helix::Dispatcher::global());
+			auto &&submit = helix::submitAwaitClock(
+				&await_initial,
+				tick + timer->initial,
+				helix::Dispatcher::global()
+			);
 			timer->asyncId = await_initial.asyncId();
 			co_await submit.async_wait();
 			timer->asyncId = 0;
@@ -41,34 +44,39 @@ private:
 				_expirations++;
 				_theSeq++;
 				_seqBell.raise();
-			}else{
+			} else {
 				delete timer;
 				co_return;
 			}
 		}
 
 		if(!timer->interval) {
-			if(_activeTimer == timer)
+			if(_activeTimer == timer) {
 				_activeTimer = nullptr;
+			}
 			delete timer;
 			co_return;
 		}
 
 		while(true) {
 			helix::AwaitClock await_interval;
-			auto &&submit = helix::submitAwaitClock(&await_interval, tick + timer->interval,
-					helix::Dispatcher::global());
+			auto &&submit = helix::submitAwaitClock(
+				&await_interval,
+				tick + timer->interval,
+				helix::Dispatcher::global()
+			);
 			timer->asyncId = await_interval.asyncId();
 			co_await submit.async_wait();
 			timer->asyncId = 0;
-			assert(!await_interval.error() || await_interval.error() == kHelErrCancelled);
+			assert(!await_interval.error() || await_interval.error() == kHelErrCancelled
+			);
 			tick += timer->interval;
 
 			if(_activeTimer == timer) {
 				_expirations++;
 				_theSeq++;
 				_seqBell.raise();
-			}else{
+			} else {
 				delete timer;
 				co_return;
 			}
@@ -77,18 +85,25 @@ private:
 
 public:
 	static void serve(smarter::shared_ptr<OpenFile> file) {
-//TODO:		assert(!file->_passthrough);
+		// TODO:		assert(!file->_passthrough);
 
 		helix::UniqueLane lane;
 		std::tie(lane, file->_passthrough) = helix::createStream();
-		async::detach(protocols::fs::servePassthrough(std::move(lane),
-				file, &File::fileOperations, file->_cancelServe));
+		async::detach(protocols::fs::servePassthrough(
+			std::move(lane),
+			file,
+			&File::fileOperations,
+			file->_cancelServe
+		));
 	}
 
 	OpenFile(bool non_block)
-	: File{StructName::get("timerfd")}, _nonBlock{non_block},
-			_activeTimer{nullptr}, _expirations{0}, _theSeq{0} {
-		(void)_nonBlock;
+	: File {StructName::get("timerfd")}
+	, _nonBlock {non_block}
+	, _activeTimer {nullptr}
+	, _expirations {0}
+	, _theSeq {0} {
+		(void) _nonBlock;
 	}
 
 	~OpenFile() {
@@ -109,17 +124,19 @@ public:
 		_expirations = 0;
 		co_return sizeof(uint64_t);
 	}
-	
+
 	async::result<frg::expected<Error, PollWaitResult>>
-	pollWait(Process *, uint64_t in_seq, int mask,
-			async::cancellation_token cancellation) override {
-		(void)mask; // TODO: utilize mask.
-		if(logTimerfd)
+	pollWait(Process *, uint64_t in_seq, int mask, async::cancellation_token cancellation)
+		override {
+		(void) mask;  // TODO: utilize mask.
+		if(logTimerfd) {
 			std::cout << "posix: timerfd::pollWait(" << in_seq << ")" << std::endl;
+		}
 		assert(in_seq <= _theSeq);
 		while(in_seq == _theSeq && !cancellation.is_cancellation_requested()) {
-			if(!isOpen())
+			if(!isOpen()) {
 				co_return Error::fileClosed;
+			}
 
 			co_await _seqBell.async_wait(cancellation);
 		}
@@ -127,20 +144,20 @@ public:
 		co_return PollWaitResult(_theSeq, _theSeq ? EPOLLIN : 0);
 	}
 
-	async::result<frg::expected<Error, PollStatusResult>>
-	pollStatus(Process *) override {
+	async::result<frg::expected<Error, PollStatusResult>> pollStatus(Process *) override {
 		co_return PollStatusResult(_theSeq, _expirations ? EPOLLIN : 0);
 	}
 
-	helix::BorrowedDescriptor getPassthroughLane() override {
-		return _passthrough;
-	}
+	helix::BorrowedDescriptor getPassthroughLane() override { return _passthrough; }
 
 	void setTime(uint64_t initial, uint64_t interval) {
 		auto current = std::exchange(_activeTimer, nullptr);
 		if(current) {
 			assert(current->asyncId);
-			HEL_CHECK(helCancelAsync(helix::Dispatcher::global().acquire(), current->asyncId));
+			HEL_CHECK(helCancelAsync(
+				helix::Dispatcher::global().acquire(),
+				current->asyncId
+			));
 		}
 
 		if(initial || interval) {
@@ -167,7 +184,7 @@ private:
 	async::recurring_event _seqBell;
 };
 
-} // anonymous namespace
+}  // anonymous namespace
 
 namespace timerfd {
 
@@ -182,26 +199,33 @@ void setTime(File *file, struct timespec initial, struct timespec interval) {
 	assert(initial.tv_sec >= 0 && initial.tv_nsec >= 0);
 	assert(interval.tv_sec >= 0 && interval.tv_nsec >= 0);
 
-	if(logTimerfd)
+	if(logTimerfd) {
 		std::cout << "setTime() initial: " << initial.tv_sec << " + " << initial.tv_nsec
-				<< ", interval: " << interval.tv_sec << " + " << interval.tv_nsec << std::endl;
+			  << ", interval: " << interval.tv_sec << " + " << interval.tv_nsec
+			  << std::endl;
+	}
 
 	// Note: __builtin_mul_overflow() with signed arguments requires a call to a
 	// compiler-rt function for clang. Cast to unsigned to avoid this issue.
 
 	uint64_t initial_nanos;
 	if(__builtin_mul_overflow(static_cast<uint64_t>(initial.tv_sec), 1000000000, &initial_nanos)
-			|| __builtin_add_overflow(initial.tv_nsec, initial_nanos, &initial_nanos))
+	   || __builtin_add_overflow(initial.tv_nsec, initial_nanos, &initial_nanos)) {
 		throw std::runtime_error("Overflow in timerfd setup");
+	}
 
 	uint64_t interval_nanos;
-	if(__builtin_mul_overflow(static_cast<uint64_t>(interval.tv_sec), 1000000000, &interval_nanos)
-			|| __builtin_add_overflow(interval.tv_nsec, interval_nanos, &interval_nanos))
+	if(__builtin_mul_overflow(
+		   static_cast<uint64_t>(interval.tv_sec),
+		   1000000000,
+		   &interval_nanos
+	   )
+	   || __builtin_add_overflow(interval.tv_nsec, interval_nanos, &interval_nanos)) {
 		throw std::runtime_error("Overflow in timerfd setup");
+	}
 
 	auto timerfd = static_cast<OpenFile *>(file);
 	timerfd->setTime(initial_nanos, interval_nanos);
 }
 
-} // namespace timerfd
-
+}  // namespace timerfd

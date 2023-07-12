@@ -1,9 +1,9 @@
 
 #include <arch/variable.hpp>
 #include <frg/list.hpp>
+#include <thor-internal/arch/paging.hpp>
 #include <thor-internal/cpu-data.hpp>
 #include <thor-internal/physical.hpp>
-#include <thor-internal/arch/paging.hpp>
 
 // --------------------------------------------------------
 // Physical page access.
@@ -13,7 +13,7 @@ namespace thor {
 
 void invalidatePage(const void *address) {
 	auto p = reinterpret_cast<const char *>(address);
-	asm volatile ("invlpg %0" : : "m"(*p) : "memory");
+	asm volatile("invlpg %0" : : "m"(*p) : "memory");
 }
 
 void invalidatePcid(int pcid) {
@@ -26,7 +26,7 @@ void invalidatePcid(int pcid) {
 	descriptor.address = nullptr;
 
 	uint64_t type = 1;
-	asm volatile ("invpcid %1, %0" : : "r"(type), "m"(descriptor) : "memory");
+	asm volatile("invpcid %1, %0" : : "r"(type), "m"(descriptor) : "memory");
 }
 
 void invalidatePage(int pcid, const void *address) {
@@ -39,14 +39,14 @@ void invalidatePage(int pcid, const void *address) {
 	descriptor.address = address;
 
 	uint64_t type = 0;
-	asm volatile ("invpcid %1, %0" : : "r"(type), "m"(descriptor) : "memory");
+	asm volatile("invpcid %1, %0" : : "r"(type), "m"(descriptor) : "memory");
 }
 
 void invalidateFullTlb() {
 	uint64_t pml4;
-	asm volatile ("mov %%cr3, %0" : "=r"(pml4));
-	pml4 &= 0x000FFFFFFFFFF000; // Clear the first bit to invalidate the PCID.
-	asm volatile ("mov %0, %%cr3" : : "r"(pml4) : "memory");
+	asm volatile("mov %%cr3, %0" : "=r"(pml4));
+	pml4 &= 0x000FFFFFFFFFF000;  // Clear the first bit to invalidate the PCID.
+	asm volatile("mov %0, %%cr3" : : "r"(pml4) : "memory");
 }
 
 void poisonPhysicalAccess(PhysicalAddr physical) {
@@ -62,7 +62,7 @@ void poisonPhysicalWriteAccess(PhysicalAddr physical) {
 	invalidatePage(reinterpret_cast<void *>(address));
 }
 
-} // namespace thor
+}  // namespace thor
 
 // --------------------------------------------------------
 
@@ -83,12 +83,13 @@ namespace thor {
 
 // --------------------------------------------------------
 
-PageContext::PageContext()
-: _nextStamp{1}, _primaryBinding{nullptr} { }
+PageContext::PageContext() : _nextStamp {1}, _primaryBinding {nullptr} {}
 
 PageBinding::PageBinding()
-: _pcid{0}, _boundSpace{nullptr},
-		_primaryStamp{0}, _alreadyShotSequence{0} { }
+: _pcid {0}
+, _boundSpace {nullptr}
+, _primaryStamp {0}
+, _alreadyShotSequence {0} {}
 
 bool PageBinding::isPrimary() {
 	assert(!intsAreEnabled());
@@ -105,9 +106,10 @@ void PageBinding::rebind() {
 	auto context = &getCpuData()->pageContext;
 
 	auto cr3 = _boundSpace->rootTable() | _pcid;
-	if(getCpuData()->havePcids)
-		cr3 |= PhysicalAddr(1) << 63; // Do not invalidate the PCID.
-	asm volatile ("mov %0, %%cr3" : : "r"(cr3) : "memory");
+	if(getCpuData()->havePcids) {
+		cr3 |= PhysicalAddr(1) << 63;  // Do not invalidate the PCID.
+	}
+	asm volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
 
 	_primaryStamp = context->_nextStamp++;
 	context->_primaryBinding = this;
@@ -116,7 +118,8 @@ void PageBinding::rebind() {
 void PageBinding::rebind(smarter::shared_ptr<PageSpace> space) {
 	assert(!intsAreEnabled());
 	assert(getCpuData()->havePcids || !_pcid);
-	assert(!_boundSpace || _boundSpace.get() != space.get()); // This would be unnecessary work.
+	assert(!_boundSpace || _boundSpace.get() != space.get()
+	);  // This would be unnecessary work.
 	auto context = &getCpuData()->pageContext;
 
 	auto unbound_space = _boundSpace;
@@ -136,7 +139,7 @@ void PageBinding::rebind(smarter::shared_ptr<PageSpace> space) {
 
 	// Switch CR3 and invalidate the PCID.
 	auto cr3 = space->rootTable() | _pcid;
-	asm volatile ("mov %0, %%cr3" : : "r"(cr3) : "memory");
+	asm volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
 
 	_primaryStamp = context->_nextStamp++;
 	context->_primaryBinding = this;
@@ -147,9 +150,8 @@ void PageBinding::rebind(smarter::shared_ptr<PageSpace> space) {
 		frg::locate_member<
 			ShootNode,
 			frg::default_list_hook<ShootNode>,
-			&ShootNode::_queueNode
-		>
-	> complete;
+			&ShootNode::_queueNode>>
+		complete;
 
 	if(unbound_space) {
 		auto lock = frg::guard(&unbound_space->_mutex);
@@ -161,15 +163,20 @@ void PageBinding::rebind(smarter::shared_ptr<PageSpace> space) {
 
 				// Signal completion of the shootdown.
 				if(current->_initiatorCpu != getCpuData()) {
-					if(current->_bindingsToShoot.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-						auto it = unbound_space->_shootQueue.iterator_to(current);
+					if(current->_bindingsToShoot
+						   .fetch_sub(1, std::memory_order_acq_rel)
+					   == 1) {
+						auto it = unbound_space->_shootQueue.iterator_to(
+							current
+						);
 						unbound_space->_shootQueue.erase(it);
 						complete.push_front(current);
 					}
 				}
 
-				if(!predecessor)
+				if(!predecessor) {
 					break;
+				}
 				current = predecessor;
 			}
 		}
@@ -190,15 +197,16 @@ void PageBinding::rebind(smarter::shared_ptr<PageSpace> space) {
 void PageBinding::unbind() {
 	assert(!intsAreEnabled());
 
-	if(!_boundSpace)
+	if(!_boundSpace) {
 		return;
+	}
 
 	// Perform shootdown.
 	if(isPrimary()) {
 		// Switch to the kernel CR3 and invalidate the PCID.
 		auto cr3 = KernelPageSpace::global().rootTable() | _pcid;
-		asm volatile ("mov %0, %%cr3" : : "r"(cr3) : "memory");
-	}else{
+		asm volatile("mov %0, %%cr3" : : "r"(cr3) : "memory");
+	} else {
 		// If there was only a single binding, it would have been primary.
 		assert(getCpuData()->havePcids);
 		invalidatePcid(_pcid);
@@ -209,9 +217,8 @@ void PageBinding::unbind() {
 		frg::locate_member<
 			ShootNode,
 			frg::default_list_hook<ShootNode>,
-			&ShootNode::_queueNode
-		>
-	> complete;
+			&ShootNode::_queueNode>>
+		complete;
 
 	{
 		auto lock = frg::guard(&_boundSpace->_mutex);
@@ -224,15 +231,20 @@ void PageBinding::unbind() {
 				// The actual shootdown was done above.
 				// Signal completion of the shootdown.
 				if(current->_initiatorCpu != getCpuData()) {
-					if(current->_bindingsToShoot.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-						auto it = _boundSpace->_shootQueue.iterator_to(current);
+					if(current->_bindingsToShoot
+						   .fetch_sub(1, std::memory_order_acq_rel)
+					   == 1) {
+						auto it =
+							_boundSpace->_shootQueue.iterator_to(current
+							);
 						_boundSpace->_shootQueue.erase(it);
 						complete.push_front(current);
 					}
 				}
 
-				if(!predecessor)
+				if(!predecessor) {
 					break;
+				}
 				current = predecessor;
 			}
 		}
@@ -256,8 +268,9 @@ void PageBinding::unbind() {
 void PageBinding::shootdown() {
 	assert(!intsAreEnabled());
 
-	if(!_boundSpace)
+	if(!_boundSpace) {
 		return;
+	}
 
 	// If we retire the space anyway, just flush the whole PCID.
 	if(_boundSpace->_wantToRetire.load(std::memory_order_acquire)) {
@@ -270,9 +283,8 @@ void PageBinding::shootdown() {
 		frg::locate_member<
 			ShootNode,
 			frg::default_list_hook<ShootNode>,
-			&ShootNode::_queueNode
-		>
-	> complete;
+			&ShootNode::_queueNode>>
+		complete;
 
 	uint64_t target_seq;
 	{
@@ -289,30 +301,49 @@ void PageBinding::shootdown() {
 						assert(!_pcid);
 						if((current->size >> kPageShift) >= 64) {
 							invalidateFullTlb();
-						}else{
-							for(size_t pg = 0; pg < current->size; pg += kPageSize)
-								invalidatePage(reinterpret_cast<void *>(current->address + pg));
+						} else {
+							for(size_t pg = 0; pg < current->size;
+							    pg += kPageSize) {
+								invalidatePage(
+									reinterpret_cast<void *>(
+										current->address
+										+ pg
+									)
+								);
+							}
 						}
-					}else{
+					} else {
 						if((current->size >> kPageShift) >= 64) {
 							invalidatePcid(_pcid);
-						}else{
-							for(size_t pg = 0; pg < current->size; pg += kPageSize)
-								invalidatePage(_pcid,
-										reinterpret_cast<void *>(current->address + pg));
+						} else {
+							for(size_t pg = 0; pg < current->size;
+							    pg += kPageSize) {
+								invalidatePage(
+									_pcid,
+									reinterpret_cast<void *>(
+										current->address
+										+ pg
+									)
+								);
+							}
 						}
 					}
 
 					// Signal completion of the shootdown.
-					if(current->_bindingsToShoot.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-						auto it = _boundSpace->_shootQueue.iterator_to(current);
+					if(current->_bindingsToShoot
+						   .fetch_sub(1, std::memory_order_acq_rel)
+					   == 1) {
+						auto it =
+							_boundSpace->_shootQueue.iterator_to(current
+							);
 						_boundSpace->_shootQueue.erase(it);
 						complete.push_front(current);
 					}
 				}
 
-				if(!predecessor)
+				if(!predecessor) {
 					break;
+				}
 				current = predecessor;
 			}
 		}
@@ -329,8 +360,7 @@ void PageBinding::shootdown() {
 
 // --------------------------------------------------------
 
-GlobalPageBinding::GlobalPageBinding()
-: _alreadyShotSequence{0} { }
+GlobalPageBinding::GlobalPageBinding() : _alreadyShotSequence {0} {}
 
 void GlobalPageBinding::bind() {
 	assert(!intsAreEnabled());
@@ -358,9 +388,8 @@ void GlobalPageBinding::shootdown() {
 		frg::locate_member<
 			ShootNode,
 			frg::default_list_hook<ShootNode>,
-			&ShootNode::_queueNode
-		>
-	> complete;
+			&ShootNode::_queueNode>>
+		complete;
 
 	uint64_t targetSeq;
 	{
@@ -373,19 +402,25 @@ void GlobalPageBinding::shootdown() {
 
 				if(current->_initiatorCpu != getCpuData()) {
 					// Perform the actual shootdown.
-					for(size_t pg = 0; pg < current->size; pg += kPageSize)
-						invalidatePage(reinterpret_cast<void *>(current->address + pg));
+					for(size_t pg = 0; pg < current->size; pg += kPageSize) {
+						invalidatePage(reinterpret_cast<void *>(
+							current->address + pg
+						));
+					}
 
 					// Signal completion of the shootdown.
-					if(current->_bindingsToShoot.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+					if(current->_bindingsToShoot
+						   .fetch_sub(1, std::memory_order_acq_rel)
+					   == 1) {
 						auto it = space->_shootQueue.iterator_to(current);
 						space->_shootQueue.erase(it);
 						complete.push_front(current);
 					}
 				}
 
-				if(!predecessor)
+				if(!predecessor) {
 					break;
+				}
 				current = predecessor;
 			}
 		}
@@ -412,26 +447,30 @@ void PageSpace::activate(smarter::shared_ptr<PageSpace> space) {
 		// If the space is currently bound, always keep that binding.
 		auto bound = bindings[i].boundSpace();
 		if(bound && bound.get() == space.get()) {
-			if(!bindings[i].isPrimary())
+			if(!bindings[i].isPrimary()) {
 				bindings[i].rebind();
+			}
 			return;
 		}
 
 		// If PCIDs are not supported, we only use the first binding.
-		if(!getCpuData()->havePcids)
+		if(!getCpuData()->havePcids) {
 			break;
+		}
 
 		// Otherwise, prefer the LRU binding.
-		if(bindings[i].primaryStamp() < bindings[k].primaryStamp())
+		if(bindings[i].primaryStamp() < bindings[k].primaryStamp()) {
 			k = i;
+		}
 	}
 
 	bindings[k].rebind(space);
 }
 
-
 PageSpace::PageSpace(PhysicalAddr root_table)
-: _rootTable{root_table}, _numBindings{0}, _shootSequence{0} { }
+: _rootTable {root_table}
+, _numBindings {0}
+, _shootSequence {0} {}
 
 PageSpace::~PageSpace() {
 	assert(!_numBindings);
@@ -450,8 +489,9 @@ void PageSpace::retire(RetireNode *node) {
 		}
 	}
 
-	if(!any_bindings)
+	if(!any_bindings) {
 		node->complete();
+	}
 
 	sendShootdownIpi();
 }
@@ -474,31 +514,39 @@ bool PageSpace::submitShootdown(ShootNode *node) {
 
 				if((node->size >> kPageShift) >= 64) {
 					invalidateFullTlb();
-				}else{
-					for(size_t pg = 0; pg < node->size; pg += kPageSize)
-						invalidatePage(reinterpret_cast<void *>(node->address + pg));
+				} else {
+					for(size_t pg = 0; pg < node->size; pg += kPageSize) {
+						invalidatePage(
+							reinterpret_cast<void *>(node->address + pg)
+						);
+					}
 				}
 				unshot_bindings--;
 			}
-		}else{
+		} else {
 			for(int i = 0; i < maxPcidCount; i++) {
-				if(bindings[i].boundSpace().get() != this)
+				if(bindings[i].boundSpace().get() != this) {
 					continue;
+				}
 				assert(unshot_bindings);
 
 				if((node->size >> kPageShift) >= 64) {
 					invalidatePcid(bindings[i].getPcid());
-				}else{
-					for(size_t pg = 0; pg < node->size; pg += kPageSize)
-						invalidatePage(bindings[i].getPcid(),
-								reinterpret_cast<void *>(node->address + pg));
+				} else {
+					for(size_t pg = 0; pg < node->size; pg += kPageSize) {
+						invalidatePage(
+							bindings[i].getPcid(),
+							reinterpret_cast<void *>(node->address + pg)
+						);
+					}
 				}
 				unshot_bindings--;
 			}
 		}
 
-		if(!unshot_bindings)
+		if(!unshot_bindings) {
 			return true;
+		}
 
 		node->_initiatorCpu = getCpuData();
 		node->_sequence = ++_shootSequence;
@@ -518,7 +566,7 @@ frg::manual_box<KernelPageSpace> kernelSpaceSingleton;
 
 void KernelPageSpace::initialize() {
 	PhysicalAddr pml4_ptr;
-	asm volatile ("mov %%cr3, %0" : "=r" (pml4_ptr));
+	asm volatile("mov %%cr3, %0" : "=r"(pml4_ptr));
 
 	kernelSpaceSingleton.initialize(pml4_ptr);
 }
@@ -527,8 +575,7 @@ KernelPageSpace &KernelPageSpace::global() {
 	return *kernelSpaceSingleton;
 }
 
-KernelPageSpace::KernelPageSpace(PhysicalAddr pml4_address)
-: _rootTable{pml4_address} { }
+KernelPageSpace::KernelPageSpace(PhysicalAddr pml4_address) : _rootTable {pml4_address} {}
 
 bool KernelPageSpace::submitShootdown(ShootNode *node) {
 	assert(!(node->address & (kPageSize - 1)));
@@ -542,12 +589,14 @@ bool KernelPageSpace::submitShootdown(ShootNode *node) {
 
 		// Perform synchronous shootdown.
 		assert(unshotBindings);
-		for(size_t pg = 0; pg < node->size; pg += kPageSize)
+		for(size_t pg = 0; pg < node->size; pg += kPageSize) {
 			invalidatePage(reinterpret_cast<void *>(node->address + pg));
+		}
 		unshotBindings--;
 
-		if(!unshotBindings)
+		if(!unshotBindings) {
 			return true;
+		}
 
 		node->_initiatorCpu = getCpuData();
 		node->_sequence = ++_shootSequence;
@@ -559,8 +608,12 @@ bool KernelPageSpace::submitShootdown(ShootNode *node) {
 	return false;
 }
 
-void KernelPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
-		uint32_t flags, CachingMode caching_mode) {
+void KernelPageSpace::mapSingle4k(
+	VirtualAddr pointer,
+	PhysicalAddr physical,
+	uint32_t flags,
+	CachingMode caching_mode
+) {
 	assert((pointer % 0x1000) == 0);
 	assert((physical % 0x1000) == 0);
 
@@ -569,26 +622,27 @@ void KernelPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
 
 	auto &region = SkeletalRegion::global();
 
-	int pml4_index = (int)((pointer >> 39) & 0x1FF);
-	int pdpt_index = (int)((pointer >> 30) & 0x1FF);
-	int pd_index = (int)((pointer >> 21) & 0x1FF);
-	int pt_index = (int)((pointer >> 12) & 0x1FF);
+	int pml4_index = (int) ((pointer >> 39) & 0x1FF);
+	int pdpt_index = (int) ((pointer >> 30) & 0x1FF);
+	int pd_index = (int) ((pointer >> 21) & 0x1FF);
+	int pt_index = (int) ((pointer >> 12) & 0x1FF);
 
 	// the pml4 exists already
-	uint64_t *pml4_pointer = (uint64_t *)region.access(rootTable());
+	uint64_t *pml4_pointer = (uint64_t *) region.access(rootTable());
 
 	// make sure there is a pdpt
 	uint64_t pml4_initial_entry = pml4_pointer[pml4_index];
 	uint64_t *pdpt_pointer;
 	if((pml4_initial_entry & kPagePresent) != 0) {
-		pdpt_pointer = (uint64_t *)region.access(pml4_initial_entry & 0x000FFFFFFFFFF000);
-	}else{
+		pdpt_pointer = (uint64_t *) region.access(pml4_initial_entry & 0x000FFFFFFFFFF000);
+	} else {
 		PhysicalAddr pdpt_page = physicalAllocator->allocate(kPageSize);
 		assert(pdpt_page != static_cast<PhysicalAddr>(-1) && "OOM");
 
-		pdpt_pointer = (uint64_t *)region.access(pdpt_page);
-		for(int i = 0; i < 512; i++)
+		pdpt_pointer = (uint64_t *) region.access(pdpt_page);
+		for(int i = 0; i < 512; i++) {
 			pdpt_pointer[i] = 0;
+		}
 
 		uint64_t new_entry = pdpt_page | kPagePresent | kPageWrite;
 		pml4_pointer[pml4_index] = new_entry;
@@ -599,14 +653,15 @@ void KernelPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
 	uint64_t pdpt_initial_entry = pdpt_pointer[pdpt_index];
 	uint64_t *pd_pointer;
 	if((pdpt_initial_entry & kPagePresent) != 0) {
-		pd_pointer = (uint64_t *)region.access(pdpt_initial_entry & 0x000FFFFFFFFFF000);
-	}else{
+		pd_pointer = (uint64_t *) region.access(pdpt_initial_entry & 0x000FFFFFFFFFF000);
+	} else {
 		PhysicalAddr pd_page = physicalAllocator->allocate(kPageSize);
 		assert(pd_page != static_cast<PhysicalAddr>(-1) && "OOM");
 
-		pd_pointer = (uint64_t *)region.access(pd_page);
-		for(int i = 0; i < 512; i++)
+		pd_pointer = (uint64_t *) region.access(pd_page);
+		for(int i = 0; i < 512; i++) {
 			pd_pointer[i] = 0;
+		}
 
 		uint64_t new_entry = pd_page | kPagePresent | kPageWrite;
 		pdpt_pointer[pdpt_index] = new_entry;
@@ -617,14 +672,15 @@ void KernelPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
 	uint64_t pd_initial_entry = pd_pointer[pd_index];
 	uint64_t *pt_pointer;
 	if((pd_initial_entry & kPagePresent) != 0) {
-		pt_pointer = (uint64_t *)region.access(pd_initial_entry & 0x000FFFFFFFFFF000);
-	}else{
+		pt_pointer = (uint64_t *) region.access(pd_initial_entry & 0x000FFFFFFFFFF000);
+	} else {
 		PhysicalAddr pt_page = physicalAllocator->allocate(kPageSize);
 		assert(pt_page != static_cast<PhysicalAddr>(-1) && "OOM");
 
-		pt_pointer = (uint64_t *)region.access(pt_page);
-		for(int i = 0; i < 512; i++)
+		pt_pointer = (uint64_t *) region.access(pt_page);
+		for(int i = 0; i < 512; i++) {
 			pt_pointer[i] = 0;
+		}
 
 		uint64_t new_entry = pt_page | kPagePresent | kPageWrite;
 		pd_pointer[pd_index] = new_entry;
@@ -634,17 +690,19 @@ void KernelPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
 	// setup the new pt entry
 	assert((pt_pointer[pt_index] & kPagePresent) == 0);
 	uint64_t new_entry = physical | kPagePresent | kPageGlobal;
-	if(flags & page_access::write)
+	if(flags & page_access::write) {
 		new_entry |= kPageWrite;
-	if(!(flags & page_access::execute))
+	}
+	if(!(flags & page_access::execute)) {
 		new_entry |= kPageXd;
+	}
 	if(caching_mode == CachingMode::writeThrough) {
 		new_entry |= kPagePwt;
-	}else if(caching_mode == CachingMode::writeCombine) {
+	} else if(caching_mode == CachingMode::writeCombine) {
 		new_entry |= kPagePat | kPagePwt;
-	}else if(caching_mode == CachingMode::uncached) {
+	} else if(caching_mode == CachingMode::uncached) {
 		new_entry |= kPagePwt | kPagePcd | kPagePat;
-	}else{
+	} else {
 		assert(caching_mode == CachingMode::null || caching_mode == CachingMode::writeBack);
 	}
 	pt_pointer[pt_index] = new_entry;
@@ -658,28 +716,28 @@ PhysicalAddr KernelPageSpace::unmapSingle4k(VirtualAddr pointer) {
 
 	auto &region = SkeletalRegion::global();
 
-	int pml4_index = (int)((pointer >> 39) & 0x1FF);
-	int pdpt_index = (int)((pointer >> 30) & 0x1FF);
-	int pd_index = (int)((pointer >> 21) & 0x1FF);
-	int pt_index = (int)((pointer >> 12) & 0x1FF);
+	int pml4_index = (int) ((pointer >> 39) & 0x1FF);
+	int pdpt_index = (int) ((pointer >> 30) & 0x1FF);
+	int pd_index = (int) ((pointer >> 21) & 0x1FF);
+	int pt_index = (int) ((pointer >> 12) & 0x1FF);
 
 	// find the pml4_entry
-	uint64_t *pml4_pointer = (uint64_t *)region.access(rootTable());
+	uint64_t *pml4_pointer = (uint64_t *) region.access(rootTable());
 	uint64_t pml4_entry = pml4_pointer[pml4_index];
 
 	// find the pdpt entry
 	assert((pml4_entry & kPagePresent) != 0);
-	uint64_t *pdpt_pointer = (uint64_t *)region.access(pml4_entry & 0x000FFFFFFFFFF000);
+	uint64_t *pdpt_pointer = (uint64_t *) region.access(pml4_entry & 0x000FFFFFFFFFF000);
 	uint64_t pdpt_entry = pdpt_pointer[pdpt_index];
 
 	// find the pd entry
 	assert((pdpt_entry & kPagePresent) != 0);
-	uint64_t *pd_pointer = (uint64_t *)region.access(pdpt_entry & 0x000FFFFFFFFFF000);
+	uint64_t *pd_pointer = (uint64_t *) region.access(pdpt_entry & 0x000FFFFFFFFFF000);
 	uint64_t pd_entry = pd_pointer[pd_index];
 
 	// find the pt entry
 	assert((pd_entry & kPagePresent) != 0);
-	uint64_t *pt_pointer = (uint64_t *)region.access(pd_entry & 0x000FFFFFFFFFF000);
+	uint64_t *pt_pointer = (uint64_t *) region.access(pd_entry & 0x000FFFFFFFFFF000);
 
 	// change the pt entry
 	assert((pt_pointer[pt_index] & kPagePresent) != 0);
@@ -691,21 +749,21 @@ PhysicalAddr KernelPageSpace::unmapSingle4k(VirtualAddr pointer) {
 // ClientPageSpace
 // --------------------------------------------------------
 
-ClientPageSpace::ClientPageSpace()
-: PageSpace{physicalAllocator->allocate(kPageSize)} {
+ClientPageSpace::ClientPageSpace() : PageSpace {physicalAllocator->allocate(kPageSize)} {
 	assert(rootTable() != PhysicalAddr(-1) && "OOM");
 
 	// Initialize the bottom half to unmapped memory.
 	PageAccessor accessor;
-	accessor = PageAccessor{rootTable()};
+	accessor = PageAccessor {rootTable()};
 	auto tbl4 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor.get());
 
-	for(size_t i = 0; i < 256; i++)
+	for(size_t i = 0; i < 256; i++) {
 		tbl4[i].store(0);
+	}
 
 	// Share the top half with the kernel.
 	auto kernel_pml4 = KernelPageSpace::global().rootTable();
-	auto kernel_table = (uint64_t *)SkeletalRegion::global().access(kernel_pml4);
+	auto kernel_table = (uint64_t *) SkeletalRegion::global().access(kernel_pml4);
 
 	for(size_t i = 256; i < 512; i++) {
 		assert(kernel_table[i] & kPagePresent);
@@ -714,32 +772,35 @@ ClientPageSpace::ClientPageSpace()
 }
 
 ClientPageSpace::~ClientPageSpace() {
-	auto clearLevel2 = [&] (PhysicalAddr ps) {
-		PageAccessor accessor{ps};
+	auto clearLevel2 = [&](PhysicalAddr ps) {
+		PageAccessor accessor {ps};
 		auto tbl = reinterpret_cast<uint64_t *>(accessor.get());
 		for(int i = 0; i < 512; i++) {
-			if(tbl[i] & kPagePresent)
+			if(tbl[i] & kPagePresent) {
 				physicalAllocator->free(tbl[i] & kPageAddress, kPageSize);
+			}
 		}
 	};
 
-	auto clearLevel3 = [&] (PhysicalAddr ps) {
-		PageAccessor accessor{ps};
+	auto clearLevel3 = [&](PhysicalAddr ps) {
+		PageAccessor accessor {ps};
 		auto tbl = reinterpret_cast<uint64_t *>(accessor.get());
 		for(int i = 0; i < 512; i++) {
-			if(!(tbl[i] & kPagePresent))
+			if(!(tbl[i] & kPagePresent)) {
 				continue;
+			}
 			clearLevel2(tbl[i] & kPageAddress);
 			physicalAllocator->free(tbl[i] & kPageAddress, kPageSize);
 		}
 	};
 
 	// From PML4, we only clear the lower half (higher half is shared with kernel).
-	PageAccessor root_accessor{rootTable()};
+	PageAccessor root_accessor {rootTable()};
 	auto root_tbl = reinterpret_cast<uint64_t *>(root_accessor.get());
 	for(int i = 0; i < 256; i++) {
-		if(!(root_tbl[i] & kPagePresent))
+		if(!(root_tbl[i] & kPagePresent)) {
 			continue;
+		}
 		clearLevel3(root_tbl[i] & kPageAddress);
 		physicalAllocator->free(root_tbl[i] & kPageAddress, kPageSize);
 	}
@@ -747,8 +808,13 @@ ClientPageSpace::~ClientPageSpace() {
 	physicalAllocator->free(rootTable(), kPageSize);
 }
 
-void ClientPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
-		bool user_page, uint32_t flags, CachingMode caching_mode) {
+void ClientPageSpace::mapSingle4k(
+	VirtualAddr pointer,
+	PhysicalAddr physical,
+	bool user_page,
+	uint32_t flags,
+	CachingMode caching_mode
+) {
 	assert((pointer % 0x1000) == 0);
 	assert((physical % 0x1000) == 0);
 
@@ -765,85 +831,91 @@ void ClientPageSpace::mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
 	arch::scalar_variable<uint64_t> *tbl2;
 	arch::scalar_variable<uint64_t> *tbl1;
 
-	auto index4 = (int)((pointer >> 39) & 0x1FF);
-	auto index3 = (int)((pointer >> 30) & 0x1FF);
-	auto index2 = (int)((pointer >> 21) & 0x1FF);
-	auto index1 = (int)((pointer >> 12) & 0x1FF);
+	auto index4 = (int) ((pointer >> 39) & 0x1FF);
+	auto index3 = (int) ((pointer >> 30) & 0x1FF);
+	auto index2 = (int) ((pointer >> 21) & 0x1FF);
+	auto index1 = (int) ((pointer >> 12) & 0x1FF);
 
 	// The PML4 does always exist.
-	accessor4 = PageAccessor{rootTable()};
+	accessor4 = PageAccessor {rootTable()};
 
 	// Make sure there is a PDPT.
 	tbl4 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor4.get());
 	if(tbl4[index4].load() & kPagePresent) {
-		accessor3 = PageAccessor{tbl4[index4].load() & 0x000FFFFFFFFFF000};
-	}else{
+		accessor3 = PageAccessor {tbl4[index4].load() & 0x000FFFFFFFFFF000};
+	} else {
 		auto tbl_address = physicalAllocator->allocate(kPageSize);
 		assert(tbl_address != PhysicalAddr(-1) && "OOM");
-		accessor3 = PageAccessor{tbl_address};
+		accessor3 = PageAccessor {tbl_address};
 		memset(accessor3.get(), 0, kPageSize);
 
 		uint64_t new_entry = tbl_address | kPagePresent | kPageWrite;
-		if(user_page)
+		if(user_page) {
 			new_entry |= kPageUser;
+		}
 		tbl4[index4].store(new_entry);
 	}
 	assert(user_page ? ((tbl4[index4].load() & kPageUser) != 0)
-			: ((tbl4[index4].load() & kPageUser) == 0));
+			 : ((tbl4[index4].load() & kPageUser) == 0));
 
 	// Make sure there is a PD.
 	tbl3 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor3.get());
 	if(tbl3[index3].load() & kPagePresent) {
-		accessor2 = PageAccessor{tbl3[index3].load() & 0x000FFFFFFFFFF000};
-	}else{
+		accessor2 = PageAccessor {tbl3[index3].load() & 0x000FFFFFFFFFF000};
+	} else {
 		auto tbl_address = physicalAllocator->allocate(kPageSize);
 		assert(tbl_address != PhysicalAddr(-1) && "OOM");
-		accessor2 = PageAccessor{tbl_address};
+		accessor2 = PageAccessor {tbl_address};
 		memset(accessor2.get(), 0, kPageSize);
 
 		uint64_t new_entry = tbl_address | kPagePresent | kPageWrite;
-		if(user_page)
+		if(user_page) {
 			new_entry |= kPageUser;
+		}
 		tbl3[index3].store(new_entry);
 	}
 	assert(user_page ? ((tbl3[index3].load() & kPageUser) != 0)
-			: ((tbl3[index3].load() & kPageUser) == 0));
+			 : ((tbl3[index3].load() & kPageUser) == 0));
 
 	// Make sure there is a PT.
 	tbl2 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor2.get());
 	if(tbl2[index2].load() & kPagePresent) {
-		accessor1 = PageAccessor{tbl2[index2].load() & 0x000FFFFFFFFFF000};
-	}else{
+		accessor1 = PageAccessor {tbl2[index2].load() & 0x000FFFFFFFFFF000};
+	} else {
 		auto tbl_address = physicalAllocator->allocate(kPageSize);
 		assert(tbl_address != PhysicalAddr(-1) && "OOM");
-		accessor1 = PageAccessor{tbl_address};
+		accessor1 = PageAccessor {tbl_address};
 		memset(accessor1.get(), 0, kPageSize);
 
 		uint64_t new_entry = tbl_address | kPagePresent | kPageWrite;
-		if(user_page)
+		if(user_page) {
 			new_entry |= kPageUser;
+		}
 		tbl2[index2].store(new_entry);
 	}
 	assert(user_page ? ((tbl2[index2].load() & kPageUser) != 0)
-			: ((tbl2[index2].load() & kPageUser) == 0));
+			 : ((tbl2[index2].load() & kPageUser) == 0));
 
 	// Setup the new PTE.
 	tbl1 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor1.get());
 	assert(!(tbl1[index1].load() & kPagePresent));
 	uint64_t new_entry = physical | kPagePresent;
-	if(user_page)
+	if(user_page) {
 		new_entry |= kPageUser;
-	if(flags & page_access::write)
+	}
+	if(flags & page_access::write) {
 		new_entry |= kPageWrite;
-	if(!(flags & page_access::execute))
+	}
+	if(!(flags & page_access::execute)) {
 		new_entry |= kPageXd;
+	}
 	if(caching_mode == CachingMode::writeThrough) {
 		new_entry |= kPagePwt;
-	}else if(caching_mode == CachingMode::writeCombine) {
+	} else if(caching_mode == CachingMode::writeCombine) {
 		new_entry |= kPagePat | kPagePwt;
-	}else if(caching_mode == CachingMode::uncached) {
+	} else if(caching_mode == CachingMode::uncached) {
 		new_entry |= kPagePwt | kPagePcd | kPagePat;
-	}else{
+	} else {
 		assert(caching_mode == CachingMode::null || caching_mode == CachingMode::writeBack);
 	}
 	tbl1[index1].store(new_entry);
@@ -860,44 +932,49 @@ PageStatus ClientPageSpace::unmapSingle4k(VirtualAddr pointer) {
 	PageAccessor accessor2;
 	PageAccessor accessor1;
 
-	auto index4 = (int)((pointer >> 39) & 0x1FF);
-	auto index3 = (int)((pointer >> 30) & 0x1FF);
-	auto index2 = (int)((pointer >> 21) & 0x1FF);
-	auto index1 = (int)((pointer >> 12) & 0x1FF);
+	auto index4 = (int) ((pointer >> 39) & 0x1FF);
+	auto index3 = (int) ((pointer >> 30) & 0x1FF);
+	auto index2 = (int) ((pointer >> 21) & 0x1FF);
+	auto index1 = (int) ((pointer >> 12) & 0x1FF);
 
 	// The PML4 is always present.
-	accessor4 = PageAccessor{rootTable()};
+	accessor4 = PageAccessor {rootTable()};
 	auto tbl4 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor4.get());
 
 	// Find the PDPT.
-	if(!(tbl4[index4].load() & kPagePresent))
+	if(!(tbl4[index4].load() & kPagePresent)) {
 		return 0;
+	}
 	assert(tbl4[index4].load() & kPagePresent);
-	accessor3 = PageAccessor{tbl4[index4].load() & 0x000FFFFFFFFFF000};
+	accessor3 = PageAccessor {tbl4[index4].load() & 0x000FFFFFFFFFF000};
 	auto tbl3 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor3.get());
 
 	// Find the PD.
-	if(!(tbl3[index3].load() & kPagePresent))
+	if(!(tbl3[index3].load() & kPagePresent)) {
 		return 0;
+	}
 	assert(tbl3[index3].load() & kPagePresent);
-	accessor2 = PageAccessor{tbl3[index3].load() & 0x000FFFFFFFFFF000};
+	accessor2 = PageAccessor {tbl3[index3].load() & 0x000FFFFFFFFFF000};
 	auto tbl2 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor2.get());
 
 	// Find the PT.
-	if(!(tbl2[index2].load() & kPagePresent))
+	if(!(tbl2[index2].load() & kPagePresent)) {
 		return 0;
+	}
 	assert(tbl2[index2].load() & kPagePresent);
-	accessor1 = PageAccessor{tbl2[index2].load() & 0x000FFFFFFFFFF000};
+	accessor1 = PageAccessor {tbl2[index2].load() & 0x000FFFFFFFFFF000};
 	auto tbl1 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor1.get());
 
 	// TODO: Do we want to preserve some bits?
 	auto bits = tbl1[index1].atomic_exchange(0);
-	if(!(bits & kPagePresent))
+	if(!(bits & kPagePresent)) {
 		return 0;
+	}
 
 	PageStatus status = page_status::present;
-	if(bits & kPageDirty)
+	if(bits & kPageDirty) {
 		status |= page_status::dirty;
+	}
 	return status;
 }
 
@@ -912,39 +989,43 @@ PageStatus ClientPageSpace::cleanSingle4k(VirtualAddr pointer) {
 	PageAccessor accessor2;
 	PageAccessor accessor1;
 
-	auto index4 = (int)((pointer >> 39) & 0x1FF);
-	auto index3 = (int)((pointer >> 30) & 0x1FF);
-	auto index2 = (int)((pointer >> 21) & 0x1FF);
-	auto index1 = (int)((pointer >> 12) & 0x1FF);
+	auto index4 = (int) ((pointer >> 39) & 0x1FF);
+	auto index3 = (int) ((pointer >> 30) & 0x1FF);
+	auto index2 = (int) ((pointer >> 21) & 0x1FF);
+	auto index1 = (int) ((pointer >> 12) & 0x1FF);
 
 	// The PML4 is always present.
-	accessor4 = PageAccessor{rootTable()};
+	accessor4 = PageAccessor {rootTable()};
 	auto tbl4 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor4.get());
 
 	// Find the PDPT.
-	if(!(tbl4[index4].load() & kPagePresent))
+	if(!(tbl4[index4].load() & kPagePresent)) {
 		return 0;
+	}
 	assert(tbl4[index4].load() & kPagePresent);
-	accessor3 = PageAccessor{tbl4[index4].load() & 0x000FFFFFFFFFF000};
+	accessor3 = PageAccessor {tbl4[index4].load() & 0x000FFFFFFFFFF000};
 	auto tbl3 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor3.get());
 
 	// Find the PD.
-	if(!(tbl3[index3].load() & kPagePresent))
+	if(!(tbl3[index3].load() & kPagePresent)) {
 		return 0;
+	}
 	assert(tbl3[index3].load() & kPagePresent);
-	accessor2 = PageAccessor{tbl3[index3].load() & 0x000FFFFFFFFFF000};
+	accessor2 = PageAccessor {tbl3[index3].load() & 0x000FFFFFFFFFF000};
 	auto tbl2 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor2.get());
 
 	// Find the PT.
-	if(!(tbl2[index2].load() & kPagePresent))
+	if(!(tbl2[index2].load() & kPagePresent)) {
 		return 0;
+	}
 	assert(tbl2[index2].load() & kPagePresent);
-	accessor1 = PageAccessor{tbl2[index2].load() & 0x000FFFFFFFFFF000};
+	accessor1 = PageAccessor {tbl2[index2].load() & 0x000FFFFFFFFFF000};
 	auto tbl1 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor1.get());
 
 	auto bits = tbl1[index1].load();
-	if(!(bits & kPagePresent))
+	if(!(bits & kPagePresent)) {
 		return 0;
+	}
 	PageStatus status = page_status::present;
 	if(bits & kPageDirty) {
 		status |= page_status::dirty;
@@ -969,31 +1050,34 @@ bool ClientPageSpace::isMapped(VirtualAddr pointer) {
 	arch::scalar_variable<uint64_t> *tbl2;
 	arch::scalar_variable<uint64_t> *tbl1;
 
-	auto index4 = (int)((pointer >> 39) & 0x1FF);
-	auto index3 = (int)((pointer >> 30) & 0x1FF);
-	auto index2 = (int)((pointer >> 21) & 0x1FF);
-	auto index1 = (int)((pointer >> 12) & 0x1FF);
+	auto index4 = (int) ((pointer >> 39) & 0x1FF);
+	auto index3 = (int) ((pointer >> 30) & 0x1FF);
+	auto index2 = (int) ((pointer >> 21) & 0x1FF);
+	auto index1 = (int) ((pointer >> 12) & 0x1FF);
 
 	// The PML4 is always present.
-	accessor4 = PageAccessor{rootTable()};
+	accessor4 = PageAccessor {rootTable()};
 	tbl4 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor4.get());
 
 	// Find the PDPT.
-	if(!(tbl4[index4].load() & kPagePresent))
+	if(!(tbl4[index4].load() & kPagePresent)) {
 		return false;
-	accessor3 = PageAccessor{tbl4[index4].load() & 0x000FFFFFFFFFF000};
+	}
+	accessor3 = PageAccessor {tbl4[index4].load() & 0x000FFFFFFFFFF000};
 	tbl3 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor3.get());
 
 	// Find the PD.
-	if(!(tbl3[index3].load() & kPagePresent))
+	if(!(tbl3[index3].load() & kPagePresent)) {
 		return false;
-	accessor2 = PageAccessor{tbl3[index3].load() & 0x000FFFFFFFFFF000};
+	}
+	accessor2 = PageAccessor {tbl3[index3].load() & 0x000FFFFFFFFFF000};
 	tbl2 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor2.get());
 
 	// Find the PT.
-	if(!(tbl2[index2].load() & kPagePresent))
+	if(!(tbl2[index2].load() & kPagePresent)) {
 		return false;
-	accessor1 = PageAccessor{tbl2[index2].load() & 0x000FFFFFFFFFF000};
+	}
+	accessor1 = PageAccessor {tbl2[index2].load() & 0x000FFFFFFFFFF000};
 	tbl1 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(accessor1.get());
 
 	return tbl1[index1].load() & kPagePresent;
@@ -1003,8 +1087,7 @@ bool ClientPageSpace::updatePageAccess(VirtualAddr) {
 	return false;
 }
 
-ClientPageSpace::Walk::Walk(ClientPageSpace *space)
-: _space{space} {
+ClientPageSpace::Walk::Walk(ClientPageSpace *space) : _space {space} {
 	irqMutex().lock();
 	_space->_mutex.lock();
 }
@@ -1018,10 +1101,10 @@ void ClientPageSpace::Walk::walkTo(uintptr_t address) {
 	assert(!(_address & (kPageSize - 1)));
 
 	_address = address;
-	_accessor4 = PageAccessor{};
-	_accessor3 = PageAccessor{};
-	_accessor2 = PageAccessor{};
-	_accessor1 = PageAccessor{};
+	_accessor4 = PageAccessor {};
+	_accessor3 = PageAccessor {};
+	_accessor2 = PageAccessor {};
+	_accessor1 = PageAccessor {};
 }
 
 PageFlags ClientPageSpace::Walk::peekFlags() {
@@ -1033,10 +1116,12 @@ PageFlags ClientPageSpace::Walk::peekFlags() {
 	assert(ent & kPagePresent);
 
 	PageFlags flags = 0;
-	if(ent & kPageWrite)
+	if(ent & kPageWrite) {
 		flags |= page_access::write;
-	if(!(ent & kPageXd))
+	}
+	if(!(ent & kPageXd)) {
 		flags |= page_access::execute;
+	}
 	return flags;
 }
 
@@ -1051,66 +1136,70 @@ PhysicalAddr ClientPageSpace::Walk::peekPhysical() {
 }
 
 void ClientPageSpace::Walk::_update() {
-	auto index4 = (int)((_address >> 39) & 0x1FF);
-	auto index3 = (int)((_address >> 30) & 0x1FF);
-	auto index2 = (int)((_address >> 21) & 0x1FF);
+	auto index4 = (int) ((_address >> 39) & 0x1FF);
+	auto index3 = (int) ((_address >> 30) & 0x1FF);
+	auto index2 = (int) ((_address >> 21) & 0x1FF);
 
 	// The PML4 does always exist.
-	_accessor4 = PageAccessor{_space->rootTable()};
+	_accessor4 = PageAccessor {_space->rootTable()};
 
 	// Make sure there is a PDPT.
 	auto tbl4 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(_accessor4.get());
-	if(!(tbl4[index4].load() & kPagePresent))
+	if(!(tbl4[index4].load() & kPagePresent)) {
 		return;
-	_accessor3 = PageAccessor{tbl4[index4].load() & 0x000FFFFFFFFFF000};
+	}
+	_accessor3 = PageAccessor {tbl4[index4].load() & 0x000FFFFFFFFFF000};
 
 	// Make sure there is a PD.
 	auto tbl3 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(_accessor3.get());
-	if(!(tbl3[index3].load() & kPagePresent))
+	if(!(tbl3[index3].load() & kPagePresent)) {
 		return;
-	_accessor2 = PageAccessor{tbl3[index3].load() & 0x000FFFFFFFFFF000};
+	}
+	_accessor2 = PageAccessor {tbl3[index3].load() & 0x000FFFFFFFFFF000};
 
 	// Make sure there is a PT.
 	auto tbl2 = reinterpret_cast<arch::scalar_variable<uint64_t> *>(_accessor2.get());
-	if(!(tbl2[index2].load() & kPagePresent))
+	if(!(tbl2[index2].load() & kPagePresent)) {
 		return;
-	_accessor1 = PageAccessor{tbl2[index2].load() & 0x000FFFFFFFFFF000};
+	}
+	_accessor1 = PageAccessor {tbl2[index2].load() & 0x000FFFFFFFFFF000};
 }
 
 void ClientPageSpace::Cursor::realizePts() {
-	auto doRealize = [&] <int S> (PageAccessor &subPt, PageAccessor &pt,
-			std::integral_constant<int, S>) {
-		auto ptPtr = reinterpret_cast<uint64_t *>(pt.get())
-				+ ((va_ >> S) & 0x1FF);
-		auto ptEnt = __atomic_load_n(ptPtr, __ATOMIC_RELAXED);
-		if(ptEnt & ptePresent) {
-			subPt = PageAccessor{ptEnt & pteAddress};
-			return;
-		}
+	auto doRealize =
+		[&]<int S>(PageAccessor &subPt, PageAccessor &pt, std::integral_constant<int, S>) {
+			auto ptPtr = reinterpret_cast<uint64_t *>(pt.get()) + ((va_ >> S) & 0x1FF);
+			auto ptEnt = __atomic_load_n(ptPtr, __ATOMIC_RELAXED);
+			if(ptEnt & ptePresent) {
+				subPt = PageAccessor {ptEnt & pteAddress};
+				return;
+			}
 
-		PhysicalAddr subPtPage = physicalAllocator->allocate(kPageSize);
-		assert(subPtPage != static_cast<PhysicalAddr>(-1) && "OOM");
+			PhysicalAddr subPtPage = physicalAllocator->allocate(kPageSize);
+			assert(subPtPage != static_cast<PhysicalAddr>(-1) && "OOM");
 
-		subPt = PageAccessor{subPtPage};
-		for(int i = 0; i < 512; i++) {
-			auto subPtPtr = reinterpret_cast<uint64_t *>(subPt.get()) + i;
-			*subPtPtr = 0;
-		}
+			subPt = PageAccessor {subPtPage};
+			for(int i = 0; i < 512; i++) {
+				auto subPtPtr = reinterpret_cast<uint64_t *>(subPt.get()) + i;
+				*subPtPtr = 0;
+			}
 
-		ptEnt = subPtPage | ptePresent | pteWrite | pteUser;
-		__atomic_store_n(ptPtr, ptEnt, __ATOMIC_RELEASE);
-	};
+			ptEnt = subPtPage | ptePresent | pteWrite | pteUser;
+			__atomic_store_n(ptPtr, ptEnt, __ATOMIC_RELEASE);
+		};
 
 	auto realize3 = [&] {
-		if(_accessor3) /* [[likely]] */
+		if(_accessor3) { /* [[likely]] */
 			return;
-		doRealize(_accessor3, _accessor4, std::integral_constant<int, 39>{});
+		}
+		doRealize(_accessor3, _accessor4, std::integral_constant<int, 39> {});
 	};
 	auto realize2 = [&] {
-		if(_accessor2) /* [[likely]] */
+		if(_accessor2) { /* [[likely]] */
 			return;
+		}
 		realize3();
-		doRealize(_accessor2, _accessor3, std::integral_constant<int, 30>{});
+		doRealize(_accessor2, _accessor3, std::integral_constant<int, 30> {});
 	};
 
 	// This function is called after cachePts() if not all PTs are present.
@@ -1120,9 +1209,8 @@ void ClientPageSpace::Cursor::realizePts() {
 	auto lock = frg::guard(&space_->_mutex);
 	{
 		realize2();
-		doRealize(_accessor1, _accessor2, std::integral_constant<int, 21>{});
+		doRealize(_accessor1, _accessor2, std::integral_constant<int, 21> {});
 	}
 }
 
-} // namespace thor
-
+}  // namespace thor

@@ -11,4 +11,4 @@ void validateKasanClean(void *pointer, size_t size);
 
 void scrubStackFrom(uintptr_t top, Continuation cont);
 
-} // namespace thor
+}  // namespace thor

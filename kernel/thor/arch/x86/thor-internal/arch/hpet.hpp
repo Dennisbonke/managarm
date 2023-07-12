@@ -1,10 +1,9 @@
 #pragma once
 
-#include <stdint.h>
-
 #include <initgraph.hpp>
-#include <thor-internal/types.hpp>
+#include <stdint.h>
 #include <thor-internal/timer.hpp>
+#include <thor-internal/types.hpp>
 
 namespace thor {
 
@@ -16,4 +15,4 @@ void pollSleepNano(uint64_t nanotime);
 
 initgraph::Stage *getHpetInitializedStage();
 
-} // namespace thor
+}  // namespace thor

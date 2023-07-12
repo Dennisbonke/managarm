@@ -10,29 +10,27 @@ namespace nic {
 struct MacAddress {
 	uint8_t &operator[](size_t idx);
 	const uint8_t &operator[](size_t idx) const;
-	inline uint8_t *data() {
-		return mac_;
-	}
-	inline const uint8_t *data() const {
-		return mac_;
-	}
+
+	inline uint8_t *data() { return mac_; }
+
+	inline const uint8_t *data() const { return mac_; }
 
 	friend bool operator==(const MacAddress &l, const MacAddress &r);
 	friend bool operator!=(const MacAddress &l, const MacAddress &r);
 
 	explicit operator bool() const {
-		return !(mac_[0] == 0 && mac_[1] == 0 && mac_[2] == 0 && mac_[3] == 0 && mac_[4] == 0 && mac_[5] == 0);
+		return !(
+			mac_[0] == 0 && mac_[1] == 0 && mac_[2] == 0 && mac_[3] == 0 && mac_[4] == 0
+			&& mac_[5] == 0
+		);
 	}
 
-	inline friend uint8_t *begin(MacAddress &m) {
-		return &m.mac_[0];
-	}
+	inline friend uint8_t *begin(MacAddress &m) { return &m.mac_[0]; }
 
-	inline friend uint8_t *end(MacAddress &m) {
-		return &m.mac_[6];
-	}
+	inline friend uint8_t *end(MacAddress &m) { return &m.mac_[6]; }
+
 private:
-	uint8_t mac_[6] = { 0 };
+	uint8_t mac_[6] = {0};
 };
 
 enum EtherType : uint16_t {
@@ -55,8 +53,7 @@ struct Link {
 	//! Sends an entire ethernet frame
 	virtual async::result<void> send(const arch::dma_buffer_view) = 0;
 	arch::dma_pool *dmaPool();
-	AllocatedBuffer allocateFrame(MacAddress to, EtherType type,
-		size_t payloadSize);
+	AllocatedBuffer allocateFrame(MacAddress to, EtherType type, size_t payloadSize);
 
 	MacAddress deviceMac();
 	int index();
@@ -66,6 +63,7 @@ struct Link {
 	static std::shared_ptr<Link> byIndex(int index);
 
 	static std::unordered_map<int64_t, std::shared_ptr<nic::Link>> &getLinks();
+
 protected:
 	arch::dma_pool *dmaPool_;
 	MacAddress mac_;
@@ -73,4 +71,4 @@ protected:
 };
 
 async::detached runDevice(std::shared_ptr<Link> dev);
-} // namespace nic
+}  // namespace nic

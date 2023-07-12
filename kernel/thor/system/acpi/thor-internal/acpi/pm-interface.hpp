@@ -4,4 +4,4 @@ namespace thor::acpi {
 
 void initializePmInterface();
 
-} // namespace thor::acpi
+}  // namespace thor::acpi

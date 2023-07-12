@@ -8,4 +8,4 @@ std::shared_ptr<UnixDevice> createMasterDevice();
 
 std::shared_ptr<FsLink> getFsRoot();
 
-} // namespace pts
+}  // namespace pts

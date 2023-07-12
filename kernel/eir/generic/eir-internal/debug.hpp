@@ -21,4 +21,4 @@ struct PanicSink {
 extern frg::stack_buffer_logger<LogSink> infoLogger;
 extern frg::stack_buffer_logger<PanicSink> panicLogger;
 
-} // namespace eir
+}  // namespace eir

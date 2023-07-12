@@ -1,8 +1,8 @@
 #pragma once
 
-#include <protocols/fs/server.hpp>
-
 #include "vfs.hpp"
+
+#include <protocols/fs/server.hpp>
 
 struct Process;
 
@@ -22,11 +22,11 @@ struct Hierarchy;
 // ----------------------------------------------------------------------------
 
 struct LinkCompare {
-	struct is_transparent { };
+	struct is_transparent {};
 
-	bool operator() (const std::shared_ptr<Link> &a, const std::shared_ptr<Link> &b) const;
-	bool operator() (const std::shared_ptr<Link> &link, const std::string &name) const;
-	bool operator() (const std::string &name, const std::shared_ptr<Link> &link) const;
+	bool operator()(const std::shared_ptr<Link> &a, const std::shared_ptr<Link> &b) const;
+	bool operator()(const std::shared_ptr<Link> &link, const std::string &name) const;
+	bool operator()(const std::string &name, const std::shared_ptr<Link> &link) const;
 };
 
 struct AttributeFile final : File {
@@ -77,11 +77,16 @@ private:
 	std::set<std::shared_ptr<Link>, LinkCompare>::iterator _iter;
 };
 
-struct Link final : FsLink, std::enable_shared_from_this<Link> {
+struct Link final
+: FsLink
+, std::enable_shared_from_this<Link> {
 	explicit Link(std::shared_ptr<FsNode> target);
 
-	explicit Link(std::shared_ptr<FsNode> owner,
-			std::string name, std::shared_ptr<FsNode> target);
+	explicit Link(
+		std::shared_ptr<FsNode> owner,
+		std::string name,
+		std::shared_ptr<FsNode> target
+	);
 
 	std::shared_ptr<FsNode> getOwner() override;
 	std::string getName() override;
@@ -93,7 +98,9 @@ private:
 	std::shared_ptr<FsNode> _target;
 };
 
-struct AttributeNode final : FsNode, std::enable_shared_from_this<AttributeNode> {
+struct AttributeNode final
+: FsNode
+, std::enable_shared_from_this<AttributeNode> {
 	friend struct AttributeFile;
 
 	AttributeNode(Object *object, Attribute *attr);
@@ -101,15 +108,18 @@ struct AttributeNode final : FsNode, std::enable_shared_from_this<AttributeNode>
 	VfsType getType() override;
 	async::result<frg::expected<Error, FileStats>> getStats() override;
 	async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-	open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			SemanticFlags semantic_flags) override;
+	open(std::shared_ptr<MountView> mount,
+	     std::shared_ptr<FsLink> link,
+	     SemanticFlags semantic_flags) override;
 
 private:
 	Object *_object;
 	Attribute *_attr;
 };
 
-struct SymlinkNode final : FsNode, std::enable_shared_from_this<SymlinkNode> {
+struct SymlinkNode final
+: FsNode
+, std::enable_shared_from_this<SymlinkNode> {
 	SymlinkNode(std::weak_ptr<Object> target);
 
 	VfsType getType() override;
@@ -120,7 +130,9 @@ private:
 	std::weak_ptr<Object> _target;
 };
 
-struct DirectoryNode final : FsNode, std::enable_shared_from_this<DirectoryNode> {
+struct DirectoryNode final
+: FsNode
+, std::enable_shared_from_this<DirectoryNode> {
 	friend struct DirectoryFile;
 
 	static std::shared_ptr<Link> createRootDirectory();
@@ -136,9 +148,11 @@ struct DirectoryNode final : FsNode, std::enable_shared_from_this<DirectoryNode>
 	std::shared_ptr<FsLink> treeLink() override;
 
 	async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-	open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			SemanticFlags semantic_flags) override;
-	async::result<frg::expected<Error, std::shared_ptr<FsLink>>> getLink(std::string name) override;
+	open(std::shared_ptr<MountView> mount,
+	     std::shared_ptr<FsLink> link,
+	     SemanticFlags semantic_flags) override;
+	async::result<frg::expected<Error, std::shared_ptr<FsLink>>> getLink(std::string name
+	) override;
 
 private:
 	Link *_treeLink;
@@ -156,13 +170,9 @@ struct Attribute {
 	virtual ~Attribute() = default;
 
 public:
-	const std::string &name() {
-		return _name;
-	}
+	const std::string &name() { return _name; }
 
-	bool writable() {
-		return _writable;
-	}
+	bool writable() { return _writable; }
 
 	virtual async::result<std::string> show(Object *object) = 0;
 	virtual async::result<void> store(Object *object, std::string data);
@@ -176,9 +186,7 @@ private:
 struct Object {
 	Object(std::shared_ptr<Object> parent, std::string name);
 
-	const std::string &name() {
-		return _name;
-	}
+	const std::string &name() { return _name; }
 
 	std::shared_ptr<DirectoryNode> directoryNode();
 
@@ -195,10 +203,8 @@ private:
 };
 
 // Hierarchy corresponds to Linux ksets.
-struct Hierarchy {
+struct Hierarchy {};
 
-};
-
-} // namespace sysfs
+}  // namespace sysfs
 
 std::shared_ptr<FsLink> getSysfs();

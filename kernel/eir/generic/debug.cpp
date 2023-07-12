@@ -1,6 +1,6 @@
+#include <eir-internal/arch.hpp>
 #include <eir-internal/debug.hpp>
 #include <eir-internal/generic.hpp>
-#include <eir-internal/arch.hpp>
 #include <frg/logging.hpp>
 #include <render-text.hpp>
 
@@ -34,26 +34,34 @@ void OutputSink::print(char c) {
 		if(c == '\n') {
 			outputX = 0;
 			outputY++;
-		}else if(outputX >= displayWidth / fontWidth) {
+		} else if(outputX >= displayWidth / fontWidth) {
 			outputX = 0;
 			outputY++;
-		}else if(outputY >= displayHeight / fontHeight) {
+		} else if(outputY >= displayHeight / fontHeight) {
 			// TODO: Scroll.
-		}else{
-			renderChars(displayFb, displayPitch / sizeof(uint32_t),
-					outputX, outputY, &c, 1, 15, -1,
-					std::integral_constant<int, fontWidth>{},
-					std::integral_constant<int, fontHeight>{});
+		} else {
+			renderChars(
+				displayFb,
+				displayPitch / sizeof(uint32_t),
+				outputX,
+				outputY,
+				&c,
+				1,
+				15,
+				-1,
+				std::integral_constant<int, fontWidth> {},
+				std::integral_constant<int, fontHeight> {}
+			);
 			outputX++;
 		}
 	}
 }
 
 void OutputSink::print(const char *str) {
-	while(*str)
+	while(*str) {
 		print(*(str++));
+	}
 }
-
 
 void LogSink::operator()(const char *c) {
 	infoSink.print(c);
@@ -63,16 +71,17 @@ void LogSink::operator()(const char *c) {
 void PanicSink::operator()(const char *c) {
 	infoSink.print(c);
 	infoSink.print('\n');
-	while(true);
+	while(true)
+		;
 }
 
-} // namespace eir
+}  // namespace eir
 
-extern "C" void __assert_fail(const char *assertion, const char *file,
-		unsigned int line, const char *function) {
+extern "C" void
+__assert_fail(const char *assertion, const char *file, unsigned int line, const char *function) {
 	eir::panicLogger() << "Assertion failed: " << assertion << "\n"
-			<< "In function " << function
-			<< " at " << file << ":" << line << frg::endlog;
+			   << "In function " << function << " at " << file << ":" << line
+			   << frg::endlog;
 }
 
 extern "C" void __cxa_pure_virtual() {

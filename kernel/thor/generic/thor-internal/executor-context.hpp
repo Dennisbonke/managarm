@@ -8,11 +8,11 @@ struct ExecutorContext {
 
 	ExecutorContext(const ExecutorContext &) = delete;
 
-	ExecutorContext &operator= (const ExecutorContext &) = delete;
+	ExecutorContext &operator=(const ExecutorContext &) = delete;
 };
 
 inline ExecutorContext *illegalExecutorContext() {
 	return reinterpret_cast<ExecutorContext *>(static_cast<uintptr_t>(-1));
 }
 
-} // namespace thor
+}  // namespace thor

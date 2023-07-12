@@ -1,5 +1,8 @@
 #pragma once
 
+#include "fwd-decls.hpp"
+#include "mode-object.hpp"
+
 #include <core/id-allocator.hpp>
 #include <helix/ipc.hpp>
 #include <map>
@@ -8,10 +11,6 @@
 #include <unordered_map>
 #include <variant>
 #include <vector>
-
-#include "fwd-decls.hpp"
-
-#include "mode-object.hpp"
 
 namespace drm_core {
 
@@ -28,13 +27,18 @@ protected:
 
 public:
 	virtual std::unique_ptr<Configuration> createConfiguration() = 0;
-	virtual std::pair<std::shared_ptr<BufferObject>, uint32_t> createDumb(uint32_t width,
-			uint32_t height, uint32_t bpp) = 0;
-	virtual std::shared_ptr<FrameBuffer> createFrameBuffer(std::shared_ptr<BufferObject> buff,
-			uint32_t width, uint32_t height, uint32_t format, uint32_t pitch) = 0;
-	//returns major, minor, patchlvl
+	virtual std::pair<std::shared_ptr<BufferObject>, uint32_t>
+	createDumb(uint32_t width, uint32_t height, uint32_t bpp) = 0;
+	virtual std::shared_ptr<FrameBuffer> createFrameBuffer(
+		std::shared_ptr<BufferObject> buff,
+		uint32_t width,
+		uint32_t height,
+		uint32_t format,
+		uint32_t pitch
+	) = 0;
+	// returns major, minor, patchlvl
 	virtual std::tuple<int, int, int> driverVersion() = 0;
-	//returns name, desc, date
+	// returns name, desc, date
 	virtual std::tuple<std::string, std::string, std::string> driverInfo() = 0;
 
 	void setupCrtc(Crtc *crtc);
@@ -63,6 +67,7 @@ public:
 	uint32_t getMaxHeight();
 
 	helix::UniqueDescriptor _posixLane;
+
 private:
 	std::vector<Crtc *> _crtcs;
 	std::vector<Encoder *> _encoders;
@@ -101,10 +106,14 @@ private:
 	std::shared_ptr<Property> _crtcWProperty;
 	std::shared_ptr<Property> _crtcHProperty;
 
-	std::map<std::array<char, 16>, std::shared_ptr<drm_core::BufferObject>> _exportedBufferObjects;
+	std::map<std::array<char, 16>, std::shared_ptr<drm_core::BufferObject>>
+		_exportedBufferObjects;
 
 public:
-	void registerBufferObject(std::shared_ptr<drm_core::BufferObject> obj, std::array<char, 16> creds);
+	void registerBufferObject(
+		std::shared_ptr<drm_core::BufferObject> obj,
+		std::array<char, 16> creds
+	);
 	std::shared_ptr<drm_core::BufferObject> findBufferObject(std::array<char, 16> creds);
 
 	id_allocator<uint32_t> allocator;
@@ -145,4 +154,4 @@ public:
 	Property *crtcHProperty();
 };
 
-} //namespace drm_core
+}  // namespace drm_core

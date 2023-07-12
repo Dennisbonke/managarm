@@ -1,10 +1,10 @@
 #pragma once
 
 #include <frg/container_of.hpp>
+#include <initgraph.hpp>
 #include <thor-internal/arch/cpu.hpp>
 #include <thor-internal/cpu-data.hpp>
 #include <thor-internal/schedule.hpp>
-#include <initgraph.hpp>
 
 namespace thor {
 
@@ -30,7 +30,8 @@ struct KernelFiber final : ScheduleEntity {
 private:
 	struct AssociatedWorkQueue final : WorkQueue {
 		AssociatedWorkQueue(KernelFiber *fiber)
-		: WorkQueue{&fiber->_executorContext}, fiber_{fiber} { }
+		: WorkQueue {&fiber->_executorContext}
+		, fiber_ {fiber} {}
 
 		void wakeup() override;
 
@@ -53,22 +54,21 @@ public:
 				// Do nothing (there is no value to store).
 			}
 
-			void set_value_noinline() {
-				KernelFiber::unblockOther(&closure->blocker);
-			}
+			void set_value_noinline() { KernelFiber::unblockOther(&closure->blocker); }
 
 			Closure *closure;
 		};
 
 		closure.blocker.setup();
-		auto operation = async::execution::connect(std::move(s), Receiver{&closure});
-		if(async::execution::start_inline(operation))
+		auto operation = async::execution::connect(std::move(s), Receiver {&closure});
+		if(async::execution::start_inline(operation)) {
 			return;
+		}
 		KernelFiber::blockCurrent(&closure.blocker);
 	}
 
 	template<typename Sender>
-	requires (!std::is_same_v<typename Sender::value_type, void>)
+	requires(!std::is_same_v<typename Sender::value_type, void>)
 	static typename Sender::value_type asyncBlockCurrent(Sender s) {
 		struct Closure {
 			frg::optional<typename Sender::value_type> value;
@@ -89,9 +89,10 @@ public:
 		};
 
 		closure.blocker.setup();
-		auto operation = async::execution::connect(std::move(s), Receiver{&closure});
-		if(async::execution::start_inline(operation))
+		auto operation = async::execution::connect(std::move(s), Receiver {&closure});
+		if(async::execution::start_inline(operation)) {
 			return std::move(*closure.value);
+		}
 		KernelFiber::blockCurrent(&closure.blocker);
 		return std::move(*closure.value);
 	}
@@ -102,7 +103,7 @@ public:
 
 	template<typename F>
 	static void run(F functor) {
-		auto frame = [] (void *argument) {
+		auto frame = [](void *argument) {
 			auto object = reinterpret_cast<F *>(argument);
 			(*object)();
 			exitCurrent();
@@ -114,7 +115,7 @@ public:
 
 	template<typename F>
 	static KernelFiber *post(F functor) {
-		auto frame = [] (void *argument) {
+		auto frame = [](void *argument) {
 			auto object = reinterpret_cast<F *>(argument);
 			(*object)();
 			exitCurrent();
@@ -129,13 +130,11 @@ public:
 
 	explicit KernelFiber(UniqueKernelStack stack, AbiParameters abi);
 
-	[[ noreturn ]] void invoke() override;
+	[[noreturn]] void invoke() override;
 
 	void handlePreemption(IrqImageAccessor) override;
 
-	WorkQueue *associatedWorkQueue() {
-		return _associatedWorkQueue.get();
-	}
+	WorkQueue *associatedWorkQueue() { return _associatedWorkQueue.get(); }
 
 private:
 	frg::ticket_spinlock _mutex;
@@ -147,4 +146,4 @@ private:
 	Executor _executor;
 };
 
-} // namespace thor
+}  // namespace thor

@@ -14,8 +14,7 @@ enum class MfsType {
 };
 
 struct MfsNode {
-	MfsNode(MfsType type)
-	: type{type} { }
+	MfsNode(MfsType type) : type {type} {}
 
 	const MfsType type;
 };
@@ -26,26 +25,22 @@ struct MfsDirectory : MfsNode {
 		MfsNode *node;
 	};
 
-	MfsDirectory()
-	: MfsNode{MfsType::directory}, _entries{*kernelAlloc} { }
+	MfsDirectory() : MfsNode {MfsType::directory}, _entries {*kernelAlloc} {}
 
 	void link(frg::string<KernelAlloc> name, MfsNode *node) {
 		assert(!getTarget(name));
-		_entries.push(Link{std::move(name), node});
+		_entries.push(Link {std::move(name), node});
 	}
 
-	size_t numEntries() {
-		return _entries.size();
-	}
+	size_t numEntries() { return _entries.size(); }
 
-	Link getEntry(size_t i) {
-		return _entries[i];
-	}
+	Link getEntry(size_t i) { return _entries[i]; }
 
 	MfsNode *getTarget(frg::string_view name) {
 		for(size_t i = 0; i < _entries.size(); i++) {
-			if(_entries[i].name == name)
+			if(_entries[i].name == name) {
 				return _entries[i].node;
+			}
 		}
 		return nullptr;
 	}
@@ -56,17 +51,15 @@ private:
 
 struct MfsRegular : MfsNode {
 	MfsRegular(smarter::shared_ptr<MemoryView> memory, size_t size)
-	: MfsNode{MfsType::regular}, _memory{std::move(memory)}, _size{size} {
+	: MfsNode {MfsType::regular}
+	, _memory {std::move(memory)}
+	, _size {size} {
 		assert(_size <= _memory->getLength());
 	}
 
-	smarter::shared_ptr<MemoryView> getMemory() {
-		return _memory;
-	}
+	smarter::shared_ptr<MemoryView> getMemory() { return _memory; }
 
-	size_t size() {
-		return _size;
-	}
+	size_t size() { return _size; }
 
 private:
 	smarter::shared_ptr<MemoryView> _memory;
@@ -77,4 +70,4 @@ extern MfsDirectory *mfsRoot;
 
 MfsNode *resolveModule(frg::string_view path);
 
-} // namespace thor
+}  // namespace thor

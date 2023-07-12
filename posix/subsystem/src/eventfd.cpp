@@ -1,14 +1,15 @@
 
-#include <string.h>
-#include <sys/epoll.h>
-#include <iostream>
+#include "eventfd.hpp"
+
+#include "fs.hpp"
+#include "process.hpp"
+#include "vfs.hpp"
 
 #include <async/recurring-event.hpp>
 #include <helix/ipc.hpp>
-#include "fs.hpp"
-#include "eventfd.hpp"
-#include "process.hpp"
-#include "vfs.hpp"
+#include <iostream>
+#include <string.h>
+#include <sys/epoll.h>
 
 namespace eventfd {
 
@@ -16,26 +17,33 @@ namespace {
 
 struct OpenFile : File {
 	OpenFile(unsigned int initval, bool nonBlock)
-	: File{StructName::get("eventfd")}, _currentSeq{1}, _readableSeq{0},
-		_writeableSeq{0}, _counter{initval}, _nonBlock{nonBlock} { }
+	: File {StructName::get("eventfd")}
+	, _currentSeq {1}
+	, _readableSeq {0}
+	, _writeableSeq {0}
+	, _counter {initval}
+	, _nonBlock {nonBlock} {}
 
-	~OpenFile() {
-	}
+	~OpenFile() {}
 
 	static void serve(smarter::shared_ptr<OpenFile> file) {
 		helix::UniqueLane lane;
 		std::tie(lane, file->_passthrough) = helix::createStream();
-		async::detach(protocols::fs::servePassthrough(std::move(lane),
-				smarter::shared_ptr<File>{file}, &File::fileOperations));
+		async::detach(protocols::fs::servePassthrough(
+			std::move(lane),
+			smarter::shared_ptr<File> {file},
+			&File::fileOperations
+		));
 	}
 
 	async::result<frg::expected<Error, size_t>>
 	readSome(Process *, void *data, size_t max_length) override {
-		if (max_length < 8)
+		if(max_length < 8) {
 			co_return Error::illegalArguments;
+		}
 
-		while (1) {
-			if (_counter) {
+		while(1) {
+			if(_counter) {
 				memcpy(data, &_counter, 8);
 				_counter = 0;
 				_writeableSeq = ++_currentSeq;
@@ -43,27 +51,31 @@ struct OpenFile : File {
 				co_return 8;
 			}
 
-			if (_nonBlock)
+			if(_nonBlock) {
 				co_return Error::wouldBlock;
-			else
+			} else {
 				co_await _doorbell.async_wait();
+			}
 		}
 	}
 
 	async::result<frg::expected<Error, size_t>>
 	writeAll(Process *process, const void *data, size_t length) override {
-		assert(length >= 8); // TODO: return Error::illegalArguments to user instead
+		assert(length >= 8);  // TODO: return Error::illegalArguments to user instead
 
 		uint64_t num;
 		memcpy(&num, data, 8);
 
-		assert(num != 0xFFFFFFFFFFFFFFFF); // TODO: return Error::wouldBlock to user instead
+		assert(num != 0xFFFFFFFFFFFFFFFF
+		);  // TODO: return Error::wouldBlock to user instead
 
-		if (num && num + _counter <= _counter) {
-			if (_nonBlock)
-				assert(!"return Error::wouldBlock from eventfd::OpenFile::writeAll");
-			else
-				co_await _doorbell.async_wait(); // wait for read
+		if(num && num + _counter <= _counter) {
+			if(_nonBlock) {
+				assert(!"return Error::wouldBlock from eventfd::OpenFile::writeAll"
+				);
+			} else {
+				co_await _doorbell.async_wait();  // wait for read
+			}
 		}
 
 		_counter += num;
@@ -74,38 +86,39 @@ struct OpenFile : File {
 	}
 
 	async::result<frg::expected<Error, PollWaitResult>>
-	pollWait(Process *, uint64_t sequence, int mask,
-			async::cancellation_token cancellation) override {
-		(void)mask; // TODO: utilize mask.
+	pollWait(Process *, uint64_t sequence, int mask, async::cancellation_token cancellation)
+		override {
+		(void) mask;  // TODO: utilize mask.
 
 		assert(sequence <= _currentSeq);
-		while (_currentSeq == sequence &&
-				!cancellation.is_cancellation_requested())
+		while(_currentSeq == sequence && !cancellation.is_cancellation_requested()) {
 			co_await _doorbell.async_wait(cancellation);
+		}
 
 		int edges = 0;
-		if (_readableSeq > sequence)
+		if(_readableSeq > sequence) {
 			edges |= EPOLLIN;
-		if (_writeableSeq > sequence)
+		}
+		if(_writeableSeq > sequence) {
 			edges |= EPOLLOUT;
+		}
 
 		co_return PollWaitResult(_currentSeq, edges);
 	}
 
-	async::result<frg::expected<Error, PollStatusResult>>
-	pollStatus(Process *) override {
+	async::result<frg::expected<Error, PollStatusResult>> pollStatus(Process *) override {
 		int events = 0;
-		if (_counter > 0)
+		if(_counter > 0) {
 			events |= EPOLLIN;
-		if (_counter < 0xFFFFFFFFFFFFFFFF)
+		}
+		if(_counter < 0xFFFFFFFFFFFFFFFF) {
 			events |= EPOLLOUT;
+		}
 
 		co_return PollStatusResult(_currentSeq, events);
 	}
 
-	helix::BorrowedDescriptor getPassthroughLane() override {
-		return _passthrough;
-	}
+	helix::BorrowedDescriptor getPassthroughLane() override { return _passthrough; }
 
 private:
 	helix::UniqueLane _passthrough;
@@ -119,7 +132,7 @@ private:
 	bool _nonBlock;
 };
 
-}
+}  // namespace
 
 smarter::shared_ptr<File, FileHandle> createFile(unsigned int initval, bool nonBlock) {
 	auto file = smarter::make_shared<OpenFile>(initval, nonBlock);
@@ -128,4 +141,4 @@ smarter::shared_ptr<File, FileHandle> createFile(unsigned int initval, bool nonB
 	return File::constructHandle(std::move(file));
 }
 
-}
+}  // namespace eventfd

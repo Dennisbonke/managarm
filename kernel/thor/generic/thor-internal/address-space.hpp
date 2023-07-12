@@ -13,13 +13,19 @@ namespace thor {
 struct VirtualSpace;
 
 template<typename Cursor, typename PageSpace>
-frg::expected<Error> mapPresentPagesByCursor(PageSpace *ps, VirtualAddr va,
-		MemoryView *view, uintptr_t offset, size_t size, PageFlags flags) {
+frg::expected<Error> mapPresentPagesByCursor(
+	PageSpace *ps,
+	VirtualAddr va,
+	MemoryView *view,
+	uintptr_t offset,
+	size_t size,
+	PageFlags flags
+) {
 	assert(!(va & (kPageSize - 1)));
 	assert(!(offset & (kPageSize - 1)));
 	assert(!(size & (kPageSize - 1)));
 
-	Cursor c{ps, va};
+	Cursor c {ps, va};
 	while(c.virtualAddress() < va + size) {
 		auto progress = c.virtualAddress() - va;
 		auto physicalRange = view->peekRange(offset + progress);
@@ -36,13 +42,19 @@ frg::expected<Error> mapPresentPagesByCursor(PageSpace *ps, VirtualAddr va,
 }
 
 template<typename Cursor, typename PageSpace>
-frg::expected<Error> remapPresentPagesByCursor(PageSpace *ps, VirtualAddr va,
-		MemoryView *view, uintptr_t offset, size_t size, PageFlags flags) {
+frg::expected<Error> remapPresentPagesByCursor(
+	PageSpace *ps,
+	VirtualAddr va,
+	MemoryView *view,
+	uintptr_t offset,
+	size_t size,
+	PageFlags flags
+) {
 	assert(!(va & (kPageSize - 1)));
 	assert(!(offset & (kPageSize - 1)));
 	assert(!(size & (kPageSize - 1)));
 
-	Cursor c{ps, va};
+	Cursor c {ps, va};
 	while(c.virtualAddress() < va + size) {
 		auto progress = c.virtualAddress() - va;
 
@@ -65,34 +77,42 @@ frg::expected<Error> remapPresentPagesByCursor(PageSpace *ps, VirtualAddr va,
 }
 
 template<typename Cursor, typename PageSpace>
-frg::expected<Error> faultPageByCursor(PageSpace *ps, VirtualAddr va,
-		MemoryView *view, uintptr_t offset, PageFlags flags) {
+frg::expected<Error> faultPageByCursor(
+	PageSpace *ps,
+	VirtualAddr va,
+	MemoryView *view,
+	uintptr_t offset,
+	PageFlags flags
+) {
 	assert(!(va & (kPageSize - 1)));
 	assert(!(offset & (kPageSize - 1)));
 
-	Cursor c{ps, va};
+	Cursor c {ps, va};
 
 	auto physicalRange = view->peekRange(offset);
-	if(physicalRange.get<0>() == PhysicalAddr(-1))
+	if(physicalRange.get<0>() == PhysicalAddr(-1)) {
 		return Error::fault;
+	}
 
-	auto status = c.remap4k(physicalRange.template get<0>(), flags, physicalRange.template get<1>());
+	auto status =
+		c.remap4k(physicalRange.template get<0>(), flags, physicalRange.template get<1>());
 	if(status & page_status::present) {
-		if(status & page_status::dirty)
+		if(status & page_status::dirty) {
 			view->markDirty(offset, kPageSize);
+		}
 	}
 
 	return {};
 }
 
 template<typename Cursor, typename PageSpace>
-frg::expected<Error> cleanPagesByCursor(PageSpace *ps, VirtualAddr va,
-		MemoryView *view, uintptr_t offset, size_t size) {
+frg::expected<Error>
+cleanPagesByCursor(PageSpace *ps, VirtualAddr va, MemoryView *view, uintptr_t offset, size_t size) {
 	assert(!(va & (kPageSize - 1)));
 	assert(!(offset & (kPageSize - 1)));
 	assert(!(size & (kPageSize - 1)));
 
-	Cursor c{ps, va};
+	Cursor c {ps, va};
 	while(c.findDirty(va + size)) {
 		auto progress = c.virtualAddress() - va;
 
@@ -107,20 +127,21 @@ frg::expected<Error> cleanPagesByCursor(PageSpace *ps, VirtualAddr va,
 }
 
 template<typename Cursor, typename PageSpace>
-frg::expected<Error> unmapPagesByCursor(PageSpace *ps, VirtualAddr va,
-		MemoryView *view, uintptr_t offset, size_t size) {
+frg::expected<Error>
+unmapPagesByCursor(PageSpace *ps, VirtualAddr va, MemoryView *view, uintptr_t offset, size_t size) {
 	assert(!(va & (kPageSize - 1)));
 	assert(!(offset & (kPageSize - 1)));
 	assert(!(size & (kPageSize - 1)));
 
-	Cursor c{ps, va};
+	Cursor c {ps, va};
 	while(c.findPresent(va + size)) {
 		auto progress = c.virtualAddress() - va;
 
 		auto status = c.unmap4k();
 		assert(status & page_status::present);
-		if(status & page_status::dirty)
+		if(status & page_status::dirty) {
 			view->markDirty(offset + progress, kPageSize);
+		}
 
 		c.advance4k();
 	}
@@ -132,8 +153,12 @@ struct VirtualOperations {
 
 	virtual bool submitShootdown(ShootNode *node) = 0;
 
-	virtual void mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
-			uint32_t flags, CachingMode cachingMode) = 0;
+	virtual void mapSingle4k(
+		VirtualAddr pointer,
+		PhysicalAddr physical,
+		uint32_t flags,
+		CachingMode cachingMode
+	) = 0;
 	virtual PageStatus unmapSingle4k(VirtualAddr pointer) = 0;
 	virtual PageStatus cleanSingle4k(VirtualAddr pointer) = 0;
 	virtual bool isMapped(VirtualAddr pointer) = 0;
@@ -143,20 +168,30 @@ struct VirtualOperations {
 	// The following API is based on MemoryView and will replace the legacy API above.
 	// The advantage of this approach is that we do not need on virtual call per page anymore.
 
-	virtual frg::expected<Error> mapPresentPages(VirtualAddr va, MemoryView *view,
-			uintptr_t offset, size_t size, PageFlags flags);
+	virtual frg::expected<Error> mapPresentPages(
+		VirtualAddr va,
+		MemoryView *view,
+		uintptr_t offset,
+		size_t size,
+		PageFlags flags
+	);
 
-	virtual frg::expected<Error> remapPresentPages(VirtualAddr va, MemoryView *view,
-			uintptr_t offset, size_t size, PageFlags flags);
+	virtual frg::expected<Error> remapPresentPages(
+		VirtualAddr va,
+		MemoryView *view,
+		uintptr_t offset,
+		size_t size,
+		PageFlags flags
+	);
 
-	virtual frg::expected<Error> faultPage(VirtualAddr va, MemoryView *view,
-			uintptr_t offset, PageFlags flags);
+	virtual frg::expected<Error>
+	faultPage(VirtualAddr va, MemoryView *view, uintptr_t offset, PageFlags flags);
 
-	virtual frg::expected<Error> cleanPages(VirtualAddr va, MemoryView *view,
-			uintptr_t offset, size_t size);
+	virtual frg::expected<Error>
+	cleanPages(VirtualAddr va, MemoryView *view, uintptr_t offset, size_t size);
 
-	virtual frg::expected<Error> unmapPages(VirtualAddr va, MemoryView *view,
-			uintptr_t offset, size_t size);
+	virtual frg::expected<Error>
+	unmapPages(VirtualAddr va, MemoryView *view, uintptr_t offset, size_t size);
 
 	virtual size_t getRss();
 
@@ -167,16 +202,13 @@ struct VirtualOperations {
 	template<typename R>
 	struct RetireOperation final : private RetireNode {
 		RetireOperation(VirtualOperations *self, R receiver)
-		: self_{self}, receiver_{std::move(receiver)} { }
+		: self_ {self}
+		, receiver_ {std::move(receiver)} {}
 
-		void start() {
-			self_->retire(this);
-		}
+		void start() { self_->retire(this); }
 
 	private:
-		void complete() override {
-			async::execution::set_value(receiver_);
-		}
+		void complete() override { async::execution::set_value(receiver_); }
 
 		VirtualOperations *self_;
 		R receiver_;
@@ -188,16 +220,12 @@ struct VirtualOperations {
 			return {self, std::move(receiver)};
 		}
 
-		async::sender_awaiter<RetireSender> operator co_await() {
-			return {*this};
-		}
+		async::sender_awaiter<RetireSender> operator co_await() { return {*this}; }
 
 		VirtualOperations *self;
 	};
 
-	RetireSender retire() {
-		return {this};
-	}
+	RetireSender retire() { return {this}; }
 
 	// ----------------------------------------------------------------------------------
 	// Sender boilerplate for shootdown()
@@ -210,8 +238,7 @@ struct VirtualOperations {
 		using value_type = void;
 
 		template<typename R>
-		friend ShootdownOperation<R>
-		connect(ShootdownSender sender, R receiver) {
+		friend ShootdownOperation<R> connect(ShootdownSender sender, R receiver) {
 			return {sender, std::move(receiver)};
 		}
 
@@ -227,11 +254,12 @@ struct VirtualOperations {
 	template<typename R>
 	struct ShootdownOperation final : private ShootNode {
 		ShootdownOperation(ShootdownSender s, R receiver)
-		: s_{s}, receiver_{std::move(receiver)} { }
+		: s_ {s}
+		, receiver_ {std::move(receiver)} {}
 
 		ShootdownOperation(const ShootdownOperation &) = delete;
 
-		ShootdownOperation &operator= (const ShootdownOperation &) = delete;
+		ShootdownOperation &operator=(const ShootdownOperation &) = delete;
 
 		bool start_inline() {
 			ShootNode::address = s_.address;
@@ -244,16 +272,13 @@ struct VirtualOperations {
 		}
 
 	private:
-		void complete() override {
-			async::execution::set_value_noinline(receiver_);
-		}
+		void complete() override { async::execution::set_value_noinline(receiver_); }
 
 		ShootdownSender s_;
 		R receiver_;
 	};
 
-	friend async::sender_awaiter<ShootdownSender>
-	operator co_await(ShootdownSender sender) {
+	friend async::sender_awaiter<ShootdownSender> operator co_await(ShootdownSender sender) {
 		return {sender};
 	}
 
@@ -265,15 +290,13 @@ protected:
 
 struct Hole {
 	Hole(VirtualAddr address, size_t length)
-	: _address{address}, _length{length}, largestHole{0} { }
+	: _address {address}
+	, _length {length}
+	, largestHole {0} {}
 
-	VirtualAddr address() const {
-		return _address;
-	}
+	VirtualAddr address() const { return _address; }
 
-	size_t length() const {
-		return _length;
-	}
+	size_t length() const { return _length; }
 
 	frg::rbtree_hook treeNode;
 
@@ -310,14 +333,16 @@ enum class MappingState {
 };
 
 struct Mapping {
-	Mapping(size_t length, MappingFlags flags,
-			smarter::shared_ptr<MemorySlice> view, uintptr_t offset);
+	Mapping(size_t length,
+		MappingFlags flags,
+		smarter::shared_ptr<MemorySlice> view,
+		uintptr_t offset);
 
 	Mapping(const Mapping &) = delete;
 
 	~Mapping();
 
-	Mapping &operator= (const Mapping &) = delete;
+	Mapping &operator=(const Mapping &) = delete;
 
 	void tie(smarter::shared_ptr<VirtualSpace> owner, VirtualAddr address);
 
@@ -325,8 +350,7 @@ struct Mapping {
 
 	void unlockVirtualRange(uintptr_t offset, size_t length);
 
-	frg::tuple<PhysicalAddr, CachingMode>
-	resolveRange(ptrdiff_t offset);
+	frg::tuple<PhysicalAddr, CachingMode> resolveRange(ptrdiff_t offset);
 
 	// ----------------------------------------------------------------------------------
 	// Sender boilerplate for lockVirtualRange()
@@ -342,8 +366,12 @@ private:
 	};
 
 	// Makes sure that pages are not evicted from virtual memory.
-	void lockVirtualRange(uintptr_t offset, size_t length,
-			smarter::shared_ptr<WorkQueue> wq, LockVirtualRangeNode *node);
+	void lockVirtualRange(
+		uintptr_t offset,
+		size_t length,
+		smarter::shared_ptr<WorkQueue> wq,
+		LockVirtualRangeNode *node
+	);
 
 public:
 	template<typename R>
@@ -362,19 +390,20 @@ public:
 		smarter::shared_ptr<WorkQueue> wq;
 	};
 
-	LockVirtualRangeSender lockVirtualRange(uintptr_t offset, size_t size,
-			smarter::shared_ptr<WorkQueue> wq) {
+	LockVirtualRangeSender
+	lockVirtualRange(uintptr_t offset, size_t size, smarter::shared_ptr<WorkQueue> wq) {
 		return {this, offset, size, std::move(wq)};
 	}
 
 	template<typename R>
 	struct LockVirtualRangeOperation final : private LockVirtualRangeNode {
 		LockVirtualRangeOperation(LockVirtualRangeSender s, R receiver)
-		: s_{s}, receiver_{std::move(receiver)} { }
+		: s_ {s}
+		, receiver_ {std::move(receiver)} {}
 
 		LockVirtualRangeOperation(const LockVirtualRangeOperation &) = delete;
 
-		LockVirtualRangeOperation &operator= (const LockVirtualRangeOperation &) = delete;
+		LockVirtualRangeOperation &operator=(const LockVirtualRangeOperation &) = delete;
 
 		void start() {
 			// XXX: work around Clang bug that runs s_.wq dtor after the call.
@@ -383,9 +412,7 @@ public:
 		}
 
 	private:
-		void resume() override {
-			async::execution::set_value(receiver_, result);
-		}
+		void resume() override { async::execution::set_value(receiver_, result); }
 
 		LockVirtualRangeSender s_;
 		R receiver_;
@@ -432,19 +459,12 @@ public:
 };
 
 struct HoleLess {
-	bool operator() (const Hole &a, const Hole &b) {
-		return a.address() < b.address();
-	}
+	bool operator()(const Hole &a, const Hole &b) { return a.address() < b.address(); }
 };
 
 struct HoleAggregator;
 
-using HoleTree = frg::rbtree<
-	Hole,
-	&Hole::treeNode,
-	HoleLess,
-	HoleAggregator
->;
+using HoleTree = frg::rbtree<Hole, &Hole::treeNode, HoleLess, HoleAggregator>;
 
 struct HoleAggregator {
 	static bool aggregate(Hole *node);
@@ -452,22 +472,17 @@ struct HoleAggregator {
 };
 
 struct MappingLess {
-	bool operator() (const Mapping &a, const Mapping &b) {
-		return a.address < b.address;
-	}
+	bool operator()(const Mapping &a, const Mapping &b) { return a.address < b.address; }
 };
 
-using MappingTree = frg::rbtree<
-	Mapping,
-	&Mapping::treeNode,
-	MappingLess
->;
+using MappingTree = frg::rbtree<Mapping, &Mapping::treeNode, MappingLess>;
 
 struct VirtualSpace {
 	friend struct Mapping;
 
 public:
 	typedef uint32_t MapFlags;
+
 	enum : MapFlags {
 		kMapFixed = 0x01,
 		kMapPreferBottom = 0x02,
@@ -494,16 +509,16 @@ public:
 
 	coroutine<frg::expected<Error, VirtualAddr>>
 	map(smarter::borrowed_ptr<MemorySlice> view,
-			VirtualAddr address, size_t offset, size_t length, uint32_t flags);
+	    VirtualAddr address,
+	    size_t offset,
+	    size_t length,
+	    uint32_t flags);
 
-	coroutine<frg::expected<Error>>
-	protect(VirtualAddr address, size_t length, uint32_t flags);
+	coroutine<frg::expected<Error>> protect(VirtualAddr address, size_t length, uint32_t flags);
 
-	coroutine<frg::expected<Error>>
-	synchronize(VirtualAddr address, size_t length);
+	coroutine<frg::expected<Error>> synchronize(VirtualAddr address, size_t length);
 
-	coroutine<frg::expected<Error>>
-	unmap(VirtualAddr address, size_t length);
+	coroutine<frg::expected<Error>> unmap(VirtualAddr address, size_t length);
 
 	coroutine<frg::expected<Error>>
 	handleFault(VirtualAddr address, uint32_t flags, smarter::shared_ptr<WorkQueue> wq);
@@ -511,9 +526,7 @@ public:
 	coroutine<frg::expected<Error, PhysicalAddr>>
 	retrievePhysical(VirtualAddr address, smarter::shared_ptr<WorkQueue> wq);
 
-	size_t rss() {
-		return _ops->getRss();
-	}
+	size_t rss() { return _ops->getRss(); }
 
 	// ----------------------------------------------------------------------------------
 	// Read/write support.
@@ -521,30 +534,44 @@ public:
 
 	// These functions read as much data as possible;
 	// on error, they read/write a partially filled buffer.
-	coroutine<size_t> readPartialSpace(uintptr_t address, void *buffer, size_t size,
-			smarter::shared_ptr<WorkQueue> wq);
-	coroutine<size_t> writePartialSpace(uintptr_t address, const void *buffer, size_t size,
-			smarter::shared_ptr<WorkQueue> wq);
+	coroutine<size_t> readPartialSpace(
+		uintptr_t address,
+		void *buffer,
+		size_t size,
+		smarter::shared_ptr<WorkQueue> wq
+	);
+	coroutine<size_t> writePartialSpace(
+		uintptr_t address,
+		const void *buffer,
+		size_t size,
+		smarter::shared_ptr<WorkQueue> wq
+	);
 
-	auto readSpace(uintptr_t address, void *buffer, size_t size,
-			smarter::shared_ptr<WorkQueue> wq) {
+	auto
+	readSpace(uintptr_t address, void *buffer, size_t size, smarter::shared_ptr<WorkQueue> wq) {
 		return async::transform(
 			readPartialSpace(address, buffer, size, std::move(wq)),
-			[=] (size_t actualSize) -> frg::expected<Error> {
-				if(actualSize != size)
+			[=](size_t actualSize) -> frg::expected<Error> {
+				if(actualSize != size) {
 					return Error::fault;
+				}
 				return {};
 			}
 		);
 	}
 
-	auto writeSpace(uintptr_t address, const void *buffer, size_t size,
-			smarter::shared_ptr<WorkQueue> wq) {
+	auto writeSpace(
+		uintptr_t address,
+		const void *buffer,
+		size_t size,
+		smarter::shared_ptr<WorkQueue> wq
+	) {
 		return async::transform(
 			writePartialSpace(address, buffer, size, std::move(wq)),
-			[=] (size_t actualSize) -> frg::expected<Error> {
-				if(actualSize != size)
+			[=](size_t actualSize) -> frg::expected<Error> {
+				if(actualSize != size) {
 					return Error::fault;
+				}
 				return {};
 			}
 		);
@@ -564,17 +591,18 @@ public:
 
 			mapping = _findMapping(address);
 		}
-		if(!mapping)
+		if(!mapping) {
 			return Error::fault;
+		}
 
 		auto offset = address - mapping->address;
-		auto [futexSpace, futexOffset] = FRG_TRY(mapping->view->resolveGlobalFutex(
-				mapping->viewOffset + offset));
-		return FutexIdentity{reinterpret_cast<uintptr_t>(futexSpace.get()), offset};
+		auto [futexSpace, futexOffset] =
+			FRG_TRY(mapping->view->resolveGlobalFutex(mapping->viewOffset + offset));
+		return FutexIdentity {reinterpret_cast<uintptr_t>(futexSpace.get()), offset};
 	}
 
-	coroutine<frg::expected<Error, GlobalFutex>> grabGlobalFutex(uintptr_t address,
-			smarter::shared_ptr<WorkQueue> wq) {
+	coroutine<frg::expected<Error, GlobalFutex>>
+	grabGlobalFutex(uintptr_t address, smarter::shared_ptr<WorkQueue> wq) {
 		// We do not take _consistencyMutex here since we are only interested in a snapshot.
 
 		smarter::shared_ptr<Mapping> mapping;
@@ -584,15 +612,17 @@ public:
 
 			mapping = _findMapping(address);
 		}
-		if(!mapping)
+		if(!mapping) {
 			co_return Error::fault;
+		}
 
 		auto offset = address - mapping->address;
-		auto [futexSpace, futexOffset] = FRG_CO_TRY(mapping->view->resolveGlobalFutex(
-				mapping->viewOffset + offset));
-		auto futexPhysical = FRG_CO_TRY(co_await futexSpace->takeGlobalFutex(futexOffset,
-				std::move(wq)));
-		co_return GlobalFutex{std::move(futexSpace), futexOffset, futexPhysical};
+		auto [futexSpace, futexOffset] =
+			FRG_CO_TRY(mapping->view->resolveGlobalFutex(mapping->viewOffset + offset));
+		auto futexPhysical =
+			FRG_CO_TRY(co_await futexSpace->takeGlobalFutex(futexOffset, std::move(wq))
+			);
+		co_return GlobalFutex {std::move(futexSpace), futexOffset, futexPhysical};
 	}
 
 	// ----------------------------------------------------------------------------------
@@ -615,9 +645,11 @@ private:
 	coroutine<frg::tuple<Mapping *, Mapping *>> _splitMappings(uintptr_t address, size_t size);
 
 	// Used in conjunction with _splitMappings.
-	// Unmaps and removes all mappings between start and end that fall within the specified range.
-	// Returns whether shootdown needs to be performed (any of the mappings got unmapped).
-	coroutine<bool> _unmapMappings(VirtualAddr address, size_t length, Mapping *start, Mapping *end);
+	// Unmaps and removes all mappings between start and end that fall within the specified
+	// range. Returns whether shootdown needs to be performed (any of the mappings got
+	// unmapped).
+	coroutine<bool>
+	_unmapMappings(VirtualAddr address, size_t length, Mapping *start, Mapping *end);
 
 	VirtualOperations *_ops;
 
@@ -636,26 +668,29 @@ private:
 	MappingTree _mappings;
 };
 
-struct AddressSpace final : VirtualSpace, smarter::crtp_counter<AddressSpace, BindableHandle> {
+struct AddressSpace final
+: VirtualSpace
+, smarter::crtp_counter<AddressSpace, BindableHandle> {
 	friend struct Mapping;
 
 	// Silence Clang warning about hidden overloads.
 	using smarter::crtp_counter<AddressSpace, BindableHandle>::dispose;
 
 	struct Operations final : VirtualOperations {
-		Operations(AddressSpace *space)
-		: space_{space} { }
+		Operations(AddressSpace *space) : space_ {space} {}
 
-		void retire(RetireNode *node) override {
-			return space_->pageSpace_.retire(node);
-		}
+		void retire(RetireNode *node) override { return space_->pageSpace_.retire(node); }
 
 		bool submitShootdown(ShootNode *node) override {
 			return space_->pageSpace_.submitShootdown(node);
 		}
 
-		void mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
-				uint32_t flags, CachingMode cachingMode) override {
+		void mapSingle4k(
+			VirtualAddr pointer,
+			PhysicalAddr physical,
+			uint32_t flags,
+			CachingMode cachingMode
+		) override {
 			space_->pageSpace_.mapSingle4k(pointer, physical, true, flags, cachingMode);
 		}
 
@@ -672,34 +707,74 @@ struct AddressSpace final : VirtualSpace, smarter::crtp_counter<AddressSpace, Bi
 		}
 
 #ifdef __x86_64__
-		frg::expected<Error> mapPresentPages(VirtualAddr va, MemoryView *view,
-				uintptr_t offset, size_t size, PageFlags flags) override {
-			return mapPresentPagesByCursor<ClientPageSpace::Cursor>(&space_->pageSpace_,
-					va, view, offset, size, flags);
+		frg::expected<Error> mapPresentPages(
+			VirtualAddr va,
+			MemoryView *view,
+			uintptr_t offset,
+			size_t size,
+			PageFlags flags
+		) override {
+			return mapPresentPagesByCursor<ClientPageSpace::Cursor>(
+				&space_->pageSpace_,
+				va,
+				view,
+				offset,
+				size,
+				flags
+			);
 		}
 
-		frg::expected<Error> remapPresentPages(VirtualAddr va, MemoryView *view,
-				uintptr_t offset, size_t size, PageFlags flags) override {
-			return remapPresentPagesByCursor<ClientPageSpace::Cursor>(&space_->pageSpace_,
-					va, view, offset, size, flags);
+		frg::expected<Error> remapPresentPages(
+			VirtualAddr va,
+			MemoryView *view,
+			uintptr_t offset,
+			size_t size,
+			PageFlags flags
+		) override {
+			return remapPresentPagesByCursor<ClientPageSpace::Cursor>(
+				&space_->pageSpace_,
+				va,
+				view,
+				offset,
+				size,
+				flags
+			);
 		}
 
-		frg::expected<Error> faultPage(VirtualAddr va, MemoryView *view,
-				uintptr_t offset, PageFlags flags) override {
-			return faultPageByCursor<ClientPageSpace::Cursor>(&space_->pageSpace_,
-					va, view, offset, flags);
+		frg::expected<Error>
+		faultPage(VirtualAddr va, MemoryView *view, uintptr_t offset, PageFlags flags)
+			override {
+			return faultPageByCursor<ClientPageSpace::Cursor>(
+				&space_->pageSpace_,
+				va,
+				view,
+				offset,
+				flags
+			);
 		}
 
-		frg::expected<Error> cleanPages(VirtualAddr va, MemoryView *view,
-				uintptr_t offset, size_t size) override {
-			return cleanPagesByCursor<ClientPageSpace::Cursor>(&space_->pageSpace_,
-					va, view, offset, size);
+		frg::expected<Error>
+		cleanPages(VirtualAddr va, MemoryView *view, uintptr_t offset, size_t size)
+			override {
+			return cleanPagesByCursor<ClientPageSpace::Cursor>(
+				&space_->pageSpace_,
+				va,
+				view,
+				offset,
+				size
+			);
 		}
 
-		frg::expected<Error> unmapPages(VirtualAddr va, MemoryView *view,
-				uintptr_t offset, size_t size) override {
-			return unmapPagesByCursor<ClientPageSpace::Cursor>(&space_->pageSpace_,
-					va, view, offset, size);
+		frg::expected<Error>
+		unmapPages(VirtualAddr va, MemoryView *view, uintptr_t offset, size_t size)
+			override {
+			return unmapPagesByCursor<ClientPageSpace::Cursor>(
+				&space_->pageSpace_,
+				va,
+				view,
+				offset,
+				size
+			);
 		}
 #endif
 
@@ -713,11 +788,14 @@ public:
 		auto space = ptr.get();
 		space->setup(smarter::adopt_rc, ptr.ctr(), 1);
 		ptr.release();
-		return smarter::shared_ptr<AddressSpace, BindableHandle>{smarter::adopt_rc, space, space};
+		return smarter::shared_ptr<AddressSpace, BindableHandle> {
+			smarter::adopt_rc,
+			space,
+			space};
 	}
 
 	static smarter::shared_ptr<AddressSpace, BindableHandle> create() {
-		auto ptr = smarter::allocate_shared<AddressSpace>(Allocator{});
+		auto ptr = smarter::allocate_shared<AddressSpace>(Allocator {});
 		ptr->selfPtr = ptr;
 		ptr->setupInitialHole(0x100000, 0x7ffffff00000);
 		return constructHandle(std::move(ptr));
@@ -733,9 +811,7 @@ public:
 
 	FutexRealm localFutexRealm;
 
-	bool updatePageAccess(VirtualAddr address) {
-		return pageSpace_.updatePageAccess(address);
-	}
+	bool updatePageAccess(VirtualAddr address) { return pageSpace_.updatePageAccess(address); }
 
 private:
 	Operations ops_;
@@ -754,29 +830,31 @@ struct MemoryViewLockHandle {
 	MemoryViewLockHandle() = default;
 
 	MemoryViewLockHandle(smarter::shared_ptr<MemoryView> view, uintptr_t offset, size_t size)
-	: _view{view}, _offset{offset}, _size{size}, _active{true} { }
+	: _view {view}
+	, _offset {offset}
+	, _size {size}
+	, _active {true} {}
 
 	MemoryViewLockHandle(const MemoryViewLockHandle &) = delete;
 
-	MemoryViewLockHandle(MemoryViewLockHandle &&other)
-	: MemoryViewLockHandle{} {
+	MemoryViewLockHandle(MemoryViewLockHandle &&other) : MemoryViewLockHandle {} {
 		swap(*this, other);
 	}
 
 	~MemoryViewLockHandle();
 
-	MemoryViewLockHandle &operator= (MemoryViewLockHandle other) {
+	MemoryViewLockHandle &operator=(MemoryViewLockHandle other) {
 		swap(*this, other);
 		return *this;
 	}
 
-	explicit operator bool () {
-		return _active;
-	}
+	explicit operator bool() { return _active; }
 
 	auto acquire(smarter::shared_ptr<WorkQueue> wq) {
-		return async::transform(_view->asyncLockRange(_offset, _size, std::move(wq)),
-			[&] (Error e) { _active = e == Error::success; });
+		return async::transform(
+			_view->asyncLockRange(_offset, _size, std::move(wq)),
+			[&](Error e) { _active = e == Error::success; }
+		);
 	}
 
 private:
@@ -787,14 +865,13 @@ private:
 };
 
 struct NamedMemoryViewLock {
-	NamedMemoryViewLock(MemoryViewLockHandle handle)
-	: _handle{std::move(handle)} { }
+	NamedMemoryViewLock(MemoryViewLockHandle handle) : _handle {std::move(handle)} {}
 
 	NamedMemoryViewLock(const NamedMemoryViewLock &) = delete;
 
 	~NamedMemoryViewLock();
 
-	NamedMemoryViewLock &operator= (const NamedMemoryViewLock &) = delete;
+	NamedMemoryViewLock &operator=(const NamedMemoryViewLock &) = delete;
 
 private:
 	MemoryViewLockHandle _handle;
@@ -802,4 +879,4 @@ private:
 
 void initializeReclaim();
 
-} // namespace thor
+}  // namespace thor

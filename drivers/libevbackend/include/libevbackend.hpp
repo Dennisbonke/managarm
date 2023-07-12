@@ -1,14 +1,13 @@
 #pragma once
 
-#include <queue>
-#include <vector>
-
-#include <async/result.hpp>
 #include <async/recurring-event.hpp>
+#include <async/result.hpp>
 #include <boost/intrusive/list.hpp>
 #include <helix/ipc.hpp>
 #include <protocols/fs/server.hpp>
 #include <protocols/mbus/client.hpp>
+#include <queue>
+#include <vector>
 
 namespace libevbackend {
 
@@ -50,15 +49,14 @@ struct File {
 	write(void *object, const char *, const void *buffer, size_t length);
 
 	static async::result<frg::expected<protocols::fs::Error, protocols::fs::PollWaitResult>>
-	pollWait(void *object, uint64_t past_seq, int mask,
-			async::cancellation_token cancellation);
+	pollWait(void *object, uint64_t past_seq, int mask, async::cancellation_token cancellation);
 
 	static async::result<frg::expected<protocols::fs::Error, protocols::fs::PollStatusResult>>
 	pollStatus(void *object);
 
 	static async::result<void>
-	ioctl(void *object, uint32_t id, helix_ng::RecvInlineResult,
-			helix::UniqueLane conversation);
+	ioctl(void *object, uint32_t id, helix_ng::RecvInlineResult, helix::UniqueLane conversation
+	);
 
 	// ------------------------------------------------------------------------
 	// Public File API.
@@ -122,12 +120,9 @@ private:
 
 	boost::intrusive::list<
 		File,
-		boost::intrusive::member_hook<
-			File,
-			boost::intrusive::list_member_hook<>,
-			&File::hook
-		>
-	> _files;
+		boost::intrusive::
+			member_hook<File, boost::intrusive::list_member_hook<>, &File::hook>>
+		_files;
 
 	std::vector<StagedEvent> _staged;
 };
@@ -136,7 +131,6 @@ private:
 // Functions
 // --------------------------------------------
 
-async::detached serveDevice(std::shared_ptr<EventDevice> device,
-		helix::UniqueLane p);
+async::detached serveDevice(std::shared_ptr<EventDevice> device, helix::UniqueLane p);
 
-} // namespace libevbackend
+}  // namespace libevbackend

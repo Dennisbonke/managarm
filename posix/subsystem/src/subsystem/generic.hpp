@@ -7,6 +7,6 @@ namespace generic_subsystem {
 
 async::detached run();
 
-} // namespace generic_subsystem
+}  // namespace generic_subsystem
 
-#endif // POSIX_SUBSYSTEM_GENERIC_SYSTEM_HPP
+#endif  // POSIX_SUBSYSTEM_GENERIC_SYSTEM_HPP

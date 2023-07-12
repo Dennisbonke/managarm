@@ -1,15 +1,15 @@
-#include <nic/virtio/virtio.hpp>
-
 #include <arch/dma_pool.hpp>
 #include <core/virtio/core.hpp>
+#include <nic/virtio/virtio.hpp>
 
 namespace {
-	constexpr bool logFrames = false;
-}
+constexpr bool logFrames = false;
+}  // namespace
 
 namespace {
 // Device feature bits.
 constexpr size_t legacyHeaderSize = 10;
+
 enum {
 	VIRTIO_NET_F_MAC = 5
 };
@@ -45,6 +45,7 @@ struct VirtioNic : nic::Link {
 	virtual async::result<void> send(const arch::dma_buffer_view) override;
 
 	virtual ~VirtioNic() override = default;
+
 private:
 	std::unique_ptr<virtio_core::Transport> transport_;
 	arch::contiguous_pool dmaPool_;
@@ -53,18 +54,22 @@ private:
 };
 
 VirtioNic::VirtioNic(std::unique_ptr<virtio_core::Transport> transport)
-	: nic::Link(1500, &dmaPool_), transport_ { std::move(transport) }
-{
+: nic::Link(1500, &dmaPool_)
+, transport_ {std::move(transport)} {
 	if(transport_->checkDeviceFeature(VIRTIO_NET_F_MAC)) {
-		for (int i = 0; i < 6; i++) {
+		for(int i = 0; i < 6; i++) {
 			mac_[i] = transport_->loadConfig8(i);
 		}
 		char ms[3 * 6 + 1];
-		sprintf(ms, "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
-				mac_[0], mac_[1], mac_[2],
-				mac_[3], mac_[4], mac_[5]);
-		std::cout << "virtio-driver: Device has a hardware MAC: "
-			<< ms << std::endl;
+		sprintf(ms,
+			"%.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
+			mac_[0],
+			mac_[1],
+			mac_[2],
+			mac_[3],
+			mac_[4],
+			mac_[5]);
+		std::cout << "virtio-driver: Device has a hardware MAC: " << ms << std::endl;
 		transport_->acknowledgeDriverFeature(VIRTIO_NET_F_MAC);
 	}
 
@@ -77,12 +82,14 @@ VirtioNic::VirtioNic(std::unique_ptr<virtio_core::Transport> transport)
 }
 
 async::result<void> VirtioNic::receive(arch::dma_buffer_view frame) {
-	arch::dma_object<VirtHeader> header { &dmaPool_ };
+	arch::dma_object<VirtHeader> header {&dmaPool_};
 
 	virtio_core::Chain chain;
 	chain.append(co_await receiveVq_->obtainDescriptor());
-	chain.setupBuffer(virtio_core::deviceToHost,
-			header.view_buffer().subview(0, legacyHeaderSize));
+	chain.setupBuffer(
+		virtio_core::deviceToHost,
+		header.view_buffer().subview(0, legacyHeaderSize)
+	);
 	chain.append(co_await receiveVq_->obtainDescriptor());
 	chain.setupBuffer(virtio_core::deviceToHost, frame);
 
@@ -92,17 +99,19 @@ async::result<void> VirtioNic::receive(arch::dma_buffer_view frame) {
 }
 
 async::result<void> VirtioNic::send(const arch::dma_buffer_view payload) {
-	if (payload.size() > 1514) {
+	if(payload.size() > 1514) {
 		throw std::runtime_error("data exceeds mtu");
 	}
 
-	arch::dma_object<VirtHeader> header { &dmaPool_ };
+	arch::dma_object<VirtHeader> header {&dmaPool_};
 	memset(header.data(), 0, sizeof(VirtHeader));
 
 	virtio_core::Chain chain;
 	chain.append(co_await transmitVq_->obtainDescriptor());
-	chain.setupBuffer(virtio_core::hostToDevice,
-			header.view_buffer().subview(0, legacyHeaderSize));
+	chain.setupBuffer(
+		virtio_core::hostToDevice,
+		header.view_buffer().subview(0, legacyHeaderSize)
+	);
 	chain.append(co_await transmitVq_->obtainDescriptor());
 	chain.setupBuffer(virtio_core::hostToDevice, payload);
 
@@ -114,13 +123,12 @@ async::result<void> VirtioNic::send(const arch::dma_buffer_view payload) {
 		std::cout << "virtio-driver: sent frame" << std::endl;
 	}
 }
-} // namespace
+}  // namespace
 
 namespace nic::virtio {
 
-std::shared_ptr<nic::Link> makeShared(
-		std::unique_ptr<virtio_core::Transport> transport) {
+std::shared_ptr<nic::Link> makeShared(std::unique_ptr<virtio_core::Transport> transport) {
 	return std::make_shared<VirtioNic>(std::move(transport));
 }
 
-} // namespace nic::virtio
+}  // namespace nic::virtio

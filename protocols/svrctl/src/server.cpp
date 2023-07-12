@@ -1,39 +1,38 @@
 
+#include "svrctl.pb.h"
+
+#include <helix/ipc.hpp>
+#include <iostream>
+#include <protocols/svrctl/server.hpp>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <iostream>
-
-#include <helix/ipc.hpp>
-
-#include <protocols/svrctl/server.hpp>
-#include "svrctl.pb.h"
 
 namespace protocols {
 namespace svrctl {
 
 static_assert(static_cast<int>(Error::success) == managarm::svrctl::Error::SUCCESS);
-static_assert(static_cast<int>(Error::deviceNotSupported)
-		== managarm::svrctl::Error::DEVICE_NOT_SUPPORTED);
+static_assert(
+	static_cast<int>(Error::deviceNotSupported) == managarm::svrctl::Error::DEVICE_NOT_SUPPORTED
+);
 
 struct ManagarmServerData {
 	HelHandle controlLane;
 };
 
-async::result<void>
-serveControl(const ControlOperations *ops) {
+async::result<void> serveControl(const ControlOperations *ops) {
 	ManagarmServerData sd;
 	HEL_CHECK(helSyscall1(kHelCallSuper + 64, reinterpret_cast<HelWord>(&sd)));
-	helix::UniqueLane lane{sd.controlLane};
+	helix::UniqueLane lane {sd.controlLane};
 
 	while(true) {
 		auto [accept, recv_req] = co_await helix_ng::exchangeMsgs(
 			lane,
-			helix_ng::accept(
-				helix_ng::recvInline())
+			helix_ng::accept(helix_ng::recvInline())
 		);
-		if(accept.error() == kHelErrEndOfLane)
+		if(accept.error() == kHelErrEndOfLane) {
 			co_return;
+		}
 		HEL_CHECK(accept.error());
 		HEL_CHECK(recv_req.error());
 
@@ -55,7 +54,7 @@ serveControl(const ControlOperations *ops) {
 				helix_ng::sendBuffer(ser.data(), ser.size())
 			);
 			HEL_CHECK(send_resp.error());
-		}else{
+		} else {
 			managarm::svrctl::SvrResponse resp;
 			resp.set_error(managarm::svrctl::Error::ILLEGAL_REQUEST);
 
@@ -69,4 +68,5 @@ serveControl(const ControlOperations *ops) {
 	}
 }
 
-} } // namespace protocols::svrctl
+}  // namespace svrctl
+}  // namespace protocols

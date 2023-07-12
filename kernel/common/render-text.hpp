@@ -7,7 +7,7 @@ constexpr uint32_t rgb(int r, int g, int b) {
 	return (r << 16) | (g << 8) | b;
 }
 
-inline constexpr uint32_t rgbColor[16] = {
+constexpr inline uint32_t rgbColor[16] = {
 	rgb(1, 1, 1),
 	rgb(222, 56, 43),
 	rgb(57, 181, 74),
@@ -23,19 +23,14 @@ inline constexpr uint32_t rgbColor[16] = {
 	rgb(0, 0, 255),
 	rgb(255, 0, 255),
 	rgb(0, 255, 255),
-	rgb(255, 255, 255)
-};
+	rgb(255, 255, 255)};
 
-inline constexpr uint32_t defaultBg = rgb(16, 16, 16);
+constexpr inline uint32_t defaultBg = rgb(16, 16, 16);
 
 extern uint8_t fontBitmap[];
 
 template<int FontWidth, int FontHeight>
-void renderChars(void *fb_ptr, unsigned int pitch,
-		unsigned int x, unsigned int y,
-		const char *c, int count, int fg, int bg,
-		std::integral_constant<int, FontWidth>,
-		std::integral_constant<int, FontHeight>) {
+void renderChars(void *fb_ptr, unsigned int pitch, unsigned int x, unsigned int y, const char *c, int count, int fg, int bg, std::integral_constant<int, FontWidth>, std::integral_constant<int, FontHeight>) {
 	auto fg_rgb = rgbColor[fg];
 	auto bg_rgb = (bg < 0) ? defaultBg : rgbColor[bg];
 
@@ -54,6 +49,5 @@ void renderChars(void *fb_ptr, unsigned int pitch,
 		line += pitch;
 	}
 
-	asm volatile ("" : : : "memory");
+	asm volatile("" : : : "memory");
 }
-

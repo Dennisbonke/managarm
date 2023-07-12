@@ -1,6 +1,7 @@
+#include "packets.hpp"
+
 #include "netlink.hpp"
 #include "netserver/nic.hpp"
-#include "packets.hpp"
 #include "src/ip/arp.hpp"
 
 #include <abi-bits/socket.h>
@@ -17,17 +18,22 @@ namespace {
 
 uint16_t mapArpStateToNetlink(Neighbours::State state) {
 	switch(state) {
-		case Neighbours::State::none: return NUD_NONE;
-		case Neighbours::State::probe: return NUD_PROBE;
-		case Neighbours::State::failed: return NUD_FAILED;
-		case Neighbours::State::reachable: return NUD_REACHABLE;
-		case Neighbours::State::stale: return NUD_STALE;
+	case Neighbours::State::none:
+		return NUD_NONE;
+	case Neighbours::State::probe:
+		return NUD_PROBE;
+	case Neighbours::State::failed:
+		return NUD_FAILED;
+	case Neighbours::State::reachable:
+		return NUD_REACHABLE;
+	case Neighbours::State::stale:
+		return NUD_STALE;
 	}
 
 	__builtin_unreachable();
 }
 
-}
+}  // namespace
 
 namespace nl {
 
@@ -45,15 +51,18 @@ void NetlinkSocket::sendLinkPacket(std::shared_ptr<nic::Link> nic, void *h) {
 		.ifi_flags = IFF_UP | IFF_LOWER_UP | IFF_RUNNING | IFF_MULTICAST | IFF_BROADCAST,
 	});
 
-	constexpr struct ether_addr broadcast_addr = { {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF} };
+	constexpr struct ether_addr broadcast_addr = {{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}};
 
-	if(!nic->name().empty())
+	if(!nic->name().empty()) {
 		b.rtattr_string(IFLA_IFNAME, nic->name());
-	if(nic->mtu)
+	}
+	if(nic->mtu) {
 		b.rtattr(IFLA_MTU, nic->mtu);
+	}
 	b.rtattr(IFLA_TXQLEN, 1000);
 	b.rtattr(IFLA_BROADCAST, broadcast_addr);
-	//TODO(no92): separate out the concept of permanent MAC addresses from userspace-configurable ones
+	// TODO(no92): separate out the concept of permanent MAC addresses from
+	// userspace-configurable ones
 	b.rtattr(IFLA_ADDRESS, nic->deviceMac());
 	b.rtattr(IFLA_PERM_ADDRESS, nic->deviceMac());
 	b.rtattr(IFLA_OPERSTATE, (uint8_t) IF_OPER_UP);
@@ -62,11 +71,16 @@ void NetlinkSocket::sendLinkPacket(std::shared_ptr<nic::Link> nic, void *h) {
 	_recvQueue.push_back(b.packet());
 }
 
-void NetlinkSocket::sendAddrPacket(const struct nlmsghdr *hdr, const struct ifaddrmsg *msg, std::shared_ptr<nic::Link> nic) {
+void NetlinkSocket::sendAddrPacket(
+	const struct nlmsghdr *hdr,
+	const struct ifaddrmsg *msg,
+	std::shared_ptr<nic::Link> nic
+) {
 	auto addr_check = ip4().getCidrByIndex(nic->index());
 
-	if(!addr_check)
+	if(!addr_check) {
 		return;
+	}
 
 	auto addr = addr_check.value();
 
@@ -104,28 +118,37 @@ void NetlinkSocket::sendRoutePacket(const struct nlmsghdr *hdr, Ip4Router::Route
 	});
 
 	b.rtattr(RTA_TABLE, RT_TABLE_MAIN);
-	if(route.network.ip)
+	if(route.network.ip) {
 		b.rtattr(RTA_DST, htonl(route.network.ip));
-	if(route.metric)
+	}
+	if(route.metric) {
 		b.rtattr(RTA_PRIORITY, route.metric);
-	if(route.gateway)
+	}
+	if(route.gateway) {
 		b.rtattr(RTA_GATEWAY, htonl(route.gateway));
-	if(route.source)
+	}
+	if(route.source) {
 		b.rtattr(RTA_PREFSRC, htonl(route.source));
+	}
 	b.rtattr(RTA_OIF, (route.link.expired()) ? 0 : route.link.lock()->index());
 
 	_recvQueue.push_back(b.packet());
 }
 
-void NetlinkSocket::sendNeighPacket(const struct nlmsghdr *hdr, uint32_t addr, Neighbours::Entry &entry) {
+void NetlinkSocket::sendNeighPacket(
+	const struct nlmsghdr *hdr,
+	uint32_t addr,
+	Neighbours::Entry &entry
+) {
 	NetlinkBuilder b;
 	int index = 0;
 
 	if(!entry.link.expired()) {
 		auto nic = entry.link.lock();
 
-		if(nic)
+		if(nic) {
 			index = nic->index();
+		}
 	}
 
 	b.header(RTM_NEWNEIGH, NLM_F_MULTI | NLM_F_DUMP_FILTERED, hdr->nlmsg_seq, 0);
@@ -142,4 +165,4 @@ void NetlinkSocket::sendNeighPacket(const struct nlmsghdr *hdr, uint32_t addr, N
 	_recvQueue.push_back(b.packet());
 }
 
-} // namespace nl
+}  // namespace nl

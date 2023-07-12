@@ -1,23 +1,24 @@
 #pragma once
 
-#include <queue>
+#include "command.hpp"
+#include "spec.hpp"
 
-#include <arch/mem_space.hpp>
-#include <arch/dma_structs.hpp>
 #include <arch/dma_pool.hpp>
+#include <arch/dma_structs.hpp>
+#include <arch/mem_space.hpp>
+#include <async/queue.hpp>
 #include <async/recurring-event.hpp>
 #include <async/result.hpp>
-#include <async/queue.hpp>
-
 #include <blockfs.hpp>
-
-#include "spec.hpp"
-#include "command.hpp"
+#include <queue>
 
 class Port : public blockfs::BlockDevice {
 public:
-	Port(int64_t parentId, int index, size_t numCommandSlots, bool staggeredSpinUp,
-			arch::mem_space regs);
+	Port(int64_t parentId,
+	     int index,
+	     size_t numCommandSlots,
+	     bool staggeredSpinUp,
+	     arch::mem_space regs);
 
 public:
 	async::result<bool> init();
@@ -27,7 +28,8 @@ public:
 	void checkErrors();
 
 	async::result<void> readSectors(uint64_t sector, void *buf, size_t numSectors) override;
-	async::result<void> writeSectors(uint64_t sector, const void *buf, size_t numSectors) override;
+	async::result<void>
+	writeSectors(uint64_t sector, const void *buf, size_t numSectors) override;
 	async::result<size_t> getSize() override;
 
 	int getIndex() const { return portIndex_; }
@@ -50,17 +52,14 @@ private:
 
 	// TODO: Move this to libasync
 	struct stl_allocator {
-		void *allocate(size_t size) {
-			return operator new(size);
-		}
+		void *allocate(size_t size) { return operator new(size); }
 
-		void deallocate(void *p, size_t) {
-			return operator delete(p);
-		}
+		void deallocate(void *p, size_t) { return operator delete(p); }
 	};
+
 	async::queue<Command *, stl_allocator> pendingCmdQueue_;
 
-	std::array<Command *, limits::maxCmdSlots> submittedCmds_{};
+	std::array<Command *, limits::maxCmdSlots> submittedCmds_ {};
 	async::recurring_event freeSlotDoorbell_;
 
 	uint64_t deviceSize_;

@@ -1,5 +1,6 @@
-#include "core/drm/core.hpp"
 #include "core/drm/device.hpp"
+
+#include "core/drm/core.hpp"
 #include "core/drm/debug.hpp"
 #include "core/drm/property.hpp"
 
@@ -39,8 +40,9 @@ void drm_core::Device::registerObject(drm_core::ModeObject *object) {
 
 std::shared_ptr<drm_core::ModeObject> drm_core::Device::findObject(uint32_t id) {
 	auto it = _objects.find(id);
-	if(it == _objects.end())
+	if(it == _objects.end()) {
 		return nullptr;
+	}
 	return it->second->sharedModeObject();
 }
 
@@ -63,8 +65,9 @@ bool drm_core::Device::deleteBlob(uint32_t id) {
 
 std::shared_ptr<drm_core::Blob> drm_core::Device::findBlob(uint32_t id) {
 	auto it = _blobs.find(id);
-	if(it == _blobs.end())
+	if(it == _blobs.end()) {
 		return nullptr;
+	}
 	return it->second;
 }
 
@@ -76,17 +79,23 @@ std::unique_ptr<drm_core::AtomicState> drm_core::Device::atomicState() {
 /**
  * Adds a (credentials, BufferObject) pair to the list of exported BOs for this device
  */
-void drm_core::Device::registerBufferObject(std::shared_ptr<drm_core::BufferObject> obj, std::array<char, 16> creds) {
+void drm_core::Device::registerBufferObject(
+	std::shared_ptr<drm_core::BufferObject> obj,
+	std::array<char, 16> creds
+) {
 	_exportedBufferObjects.insert({creds, obj});
 }
 
 /**
- * Retrieves a BufferObject from the list of exported BOs for this device, given the credentials for it
+ * Retrieves a BufferObject from the list of exported BOs for this device, given the credentials for
+ * it
  */
-std::shared_ptr<drm_core::BufferObject> drm_core::Device::findBufferObject(std::array<char, 16> creds) {
+std::shared_ptr<drm_core::BufferObject>
+drm_core::Device::findBufferObject(std::array<char, 16> creds) {
 	auto it = _exportedBufferObjects.find(creds);
-	if(it == _exportedBufferObjects.end())
+	if(it == _exportedBufferObjects.end()) {
 		return nullptr;
+	}
 	return it->second;
 }
 

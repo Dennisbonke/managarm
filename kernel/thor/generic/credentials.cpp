@@ -1,7 +1,6 @@
 #include <atomic>
 #include <stdint.h>
 #include <string.h>
-
 #include <thor-internal/credentials.hpp>
 
 namespace thor {
@@ -15,4 +14,4 @@ Credentials::Credentials() {
 	memcpy(_credentials + 8, &id, sizeof(uint64_t));
 }
 
-}
+}  // namespace thor

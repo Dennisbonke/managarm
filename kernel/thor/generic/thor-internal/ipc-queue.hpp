@@ -53,16 +53,12 @@ struct QueueSource {
 struct IpcNode {
 	friend struct IpcQueue;
 
-	IpcNode()
-	: _context{0}, _source{nullptr} { }
+	IpcNode() : _context {0}, _source {nullptr} {}
 
 	// Users of IpcQueue::submit() have to set this up first.
-	void setupContext(uintptr_t context) {
-		_context = context;
-	}
-	void setupSource(QueueSource *source) {
-		_source = source;
-	}
+	void setupContext(uintptr_t context) { _context = context; }
+
+	void setupSource(QueueSource *source) { _source = source; }
 
 	virtual void complete() = 0;
 
@@ -83,12 +79,7 @@ private:
 
 	using NodeList = frg::intrusive_list<
 		IpcNode,
-		frg::locate_member<
-			IpcNode,
-			frg::default_list_hook<IpcNode>,
-			&IpcNode::_queueNode
-		>
-	>;
+		frg::locate_member<IpcNode, frg::default_list_hook<IpcNode>, &IpcNode::_queueNode>>;
 
 	using Mutex = frg::ticket_spinlock;
 
@@ -97,15 +88,17 @@ public:
 
 	IpcQueue(const IpcQueue &) = delete;
 
-	IpcQueue &operator= (const IpcQueue &) = delete;
+	IpcQueue &operator=(const IpcQueue &) = delete;
 
-	smarter::shared_ptr<MemoryView> getMemory() {
-		return _memory;
-	}
+	smarter::shared_ptr<MemoryView> getMemory() { return _memory; }
 
 	bool validSize(size_t size);
 
-	void setupChunk(size_t index, smarter::shared_ptr<AddressSpace, BindableHandle> space, void *pointer);
+	void setupChunk(
+		size_t index,
+		smarter::shared_ptr<AddressSpace, BindableHandle> space,
+		void *pointer
+	);
 
 	void submit(IpcNode *node);
 
@@ -118,8 +111,7 @@ public:
 
 	struct [[nodiscard]] SubmitSender {
 		template<typename R>
-		friend SubmitOperation<R>
-		connect(SubmitSender sender, R receiver) {
+		friend SubmitOperation<R> connect(SubmitSender sender, R receiver) {
 			return {sender, std::move(receiver)};
 		}
 
@@ -135,11 +127,12 @@ public:
 	template<typename R>
 	struct SubmitOperation final : private IpcNode {
 		SubmitOperation(SubmitSender s, R receiver)
-		: s_{s}, receiver_{std::move(receiver)} { }
+		: s_ {s}
+		, receiver_ {std::move(receiver)} {}
 
 		SubmitOperation(const SubmitOperation &) = delete;
 
-		SubmitOperation &operator= (const SubmitOperation &) = delete;
+		SubmitOperation &operator=(const SubmitOperation &) = delete;
 
 		void start() {
 			setupSource(s_.source);
@@ -148,16 +141,13 @@ public:
 		}
 
 	private:
-		void complete() override {
-			async::execution::set_value(receiver_);
-		}
+		void complete() override { async::execution::set_value(receiver_); }
 
 		SubmitSender s_;
 		R receiver_;
 	};
 
-	friend async::sender_awaiter<SubmitSender>
-	operator co_await(SubmitSender sender) {
+	friend async::sender_awaiter<SubmitSender> operator co_await(SubmitSender sender) {
 		return {sender};
 	}
 
@@ -185,16 +175,12 @@ private:
 
 	frg::intrusive_list<
 		IpcNode,
-		frg::locate_member<
-			IpcNode,
-			frg::default_list_hook<IpcNode>,
-			&IpcNode::_queueNode
-		>
-	> _nodeQueue;
+		frg::locate_member<IpcNode, frg::default_list_hook<IpcNode>, &IpcNode::_queueNode>>
+		_nodeQueue;
 
 	// Stores whether any nodes are in the queue.
 	// Written only when _mutex is held (but read outside of _mutex).
 	std::atomic<bool> _anyNodes;
 };
 
-} // namespace thor
+}  // namespace thor

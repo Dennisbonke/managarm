@@ -29,8 +29,11 @@ struct Field {
 
 struct Element {
 	Element()
-	: usageId{0}, usagePage{0}, isAbsolute{false},
-			inputType{-1}, inputCode{-1} { }
+	: usageId {0}
+	, usagePage {0}
+	, isAbsolute {false}
+	, inputType {-1}
+	, inputCode {-1} {}
 
 	uint32_t usageId;
 	uint16_t usagePage;
@@ -50,7 +53,7 @@ struct Element {
 
 struct HidDevice {
 	HidDevice();
-	void parseReportDescriptor(Device device, uint8_t* p, uint8_t* limit);
+	void parseReportDescriptor(Device device, uint8_t *p, uint8_t *limit);
 	async::detached run(Device device, int intf_num, int config_num);
 
 	std::vector<Field> fields;

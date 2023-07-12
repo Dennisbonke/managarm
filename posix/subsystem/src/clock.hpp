@@ -11,4 +11,4 @@ async::result<void> enumerateTracker();
 
 struct timespec getRealtime();
 
-} // namespace clk
+}  // namespace clk

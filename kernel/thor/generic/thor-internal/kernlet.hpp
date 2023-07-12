@@ -1,7 +1,7 @@
 #pragma once
 
-#include <frg/vector.hpp>
 #include <frg/variant.hpp>
+#include <frg/vector.hpp>
 #include <thor-internal/event.hpp>
 
 namespace thor {
@@ -25,7 +25,10 @@ struct KernletObject {
 	// TODO: Add a getIrqAutomationEntry() function instead.
 	friend struct BoundKernlet;
 
-	KernletObject(void *entry, const frg::vector<KernletParameterType, KernelAlloc> &bind_types);
+	KernletObject(
+		void *entry,
+		const frg::vector<KernletParameterType, KernelAlloc> &bind_types
+	);
 
 	size_t instanceSize();
 	size_t numberOfBindParameters();
@@ -40,13 +43,9 @@ private:
 struct BoundKernlet {
 	BoundKernlet(smarter::shared_ptr<KernletObject> object);
 
-	KernletObject *object() {
-		return _object.get();
-	}
+	KernletObject *object() { return _object.get(); }
 
-	const void *instanceStruct() {
-		return _instance;
-	}
+	const void *instanceStruct() { return _instance; }
 
 	void setupOffsetBinding(size_t index, uint32_t offset);
 	void setupMemoryViewBinding(size_t index, void *p);
@@ -61,4 +60,4 @@ private:
 
 void initializeKernletCtl();
 
-} // namespace thor
+}  // namespace thor

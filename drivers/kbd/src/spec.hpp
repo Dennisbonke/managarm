@@ -13,17 +13,17 @@ constexpr int enable1stPort = 0xAE;
 constexpr int write2ndNextByte = 0xD4;
 
 namespace kbd_register {
-	arch::scalar_register<uint8_t> data(0);
-	arch::bit_register<uint8_t> status(4);
-	arch::scalar_register<uint8_t> command(4);
-}
+arch::scalar_register<uint8_t> data(0);
+arch::bit_register<uint8_t> status(4);
+arch::scalar_register<uint8_t> command(4);
+}  // namespace kbd_register
 
 namespace status_bits {
-	arch::field<uint8_t, bool> outBufferStatus(0, 1);
-	arch::field<uint8_t, bool> inBufferStatus(1, 1);
-	arch::field<uint8_t, bool> sysFlag(2, 1);
-	arch::field<uint8_t, bool> cmdData(3, 1);
-	arch::field<uint8_t, bool> secondPort(5, 1);
-	arch::field<uint8_t, bool> timeoutError(6, 1);
-	arch::field<uint8_t, bool> parityError(7, 1);
-}
+arch::field<uint8_t, bool> outBufferStatus(0, 1);
+arch::field<uint8_t, bool> inBufferStatus(1, 1);
+arch::field<uint8_t, bool> sysFlag(2, 1);
+arch::field<uint8_t, bool> cmdData(3, 1);
+arch::field<uint8_t, bool> secondPort(5, 1);
+arch::field<uint8_t, bool> timeoutError(6, 1);
+arch::field<uint8_t, bool> parityError(7, 1);
+}  // namespace status_bits

@@ -1,11 +1,10 @@
 #pragma once
 
-#include <string.h>
 #include <atomic>
-
 #include <frg/container_of.hpp>
-#include <thor-internal/credentials.hpp>
+#include <string.h>
 #include <thor-internal/cpu-data.hpp>
+#include <thor-internal/credentials.hpp>
 #include <thor-internal/error.hpp>
 #include <thor-internal/schedule.hpp>
 #include <thor-internal/universe.hpp>
@@ -26,26 +25,30 @@ enum Interrupt {
 
 struct Thread;
 
-template <template<typename, typename> typename Ptr, typename T, typename H>
-	requires (!std::is_same_v<H, void>)
+template<template<typename, typename> typename Ptr, typename T, typename H>
+requires(!std::is_same_v<H, void>)
 Ptr<T, void> remove_tag_cast(const Ptr<T, H> &other) {
 	other.ctr()->holder()->increment();
-	auto ret = Ptr<T, void>{smarter::adopt_rc, other.get(), other.ctr()->holder()};
+	auto ret = Ptr<T, void> {smarter::adopt_rc, other.get(), other.ctr()->holder()};
 	return ret;
 }
 
 smarter::borrowed_ptr<Thread> getCurrentThread();
 
-struct ActiveHandle { };
+struct ActiveHandle {};
 
-struct Thread final : smarter::crtp_counter<Thread, ActiveHandle>, ScheduleEntity, Credentials {
+struct Thread final
+: smarter::crtp_counter<Thread, ActiveHandle>
+, ScheduleEntity
+, Credentials {
 	// Silence Clang warning about hidden overloads.
 	using smarter::crtp_counter<Thread, ActiveHandle>::dispose;
 
 private:
 	struct AssociatedWorkQueue final : WorkQueue {
 		AssociatedWorkQueue(Thread *thread)
-		: WorkQueue{&thread->_executorContext}, _thread{thread} { }
+		: WorkQueue {&thread->_executorContext}
+		, _thread {thread} {}
 
 		void wakeup() override;
 
@@ -54,20 +57,27 @@ private:
 	};
 
 public:
-	static smarter::shared_ptr<Thread, ActiveHandle> create(smarter::shared_ptr<Universe> universe,
-			smarter::shared_ptr<AddressSpace, BindableHandle> address_space,
-			AbiParameters abi) {
-		auto thread = smarter::allocate_shared<Thread>(*kernelAlloc,
-				std::move(universe), std::move(address_space), abi);
+	static smarter::shared_ptr<Thread, ActiveHandle>
+	create(smarter::shared_ptr<Universe> universe,
+	       smarter::shared_ptr<AddressSpace, BindableHandle> address_space,
+	       AbiParameters abi) {
+		auto thread = smarter::allocate_shared<Thread>(
+			*kernelAlloc,
+			std::move(universe),
+			std::move(address_space),
+			abi
+		);
 		auto ptr = thread.get();
 		ptr->setup(smarter::adopt_rc, thread.ctr(), 1);
 		thread.release();
-		smarter::shared_ptr<Thread, ActiveHandle> sptr{smarter::adopt_rc, ptr, ptr};
+		smarter::shared_ptr<Thread, ActiveHandle> sptr {smarter::adopt_rc, ptr, ptr};
 
 		ptr->_mainWorkQueue.selfPtr = remove_tag_cast(
-				smarter::shared_ptr<WorkQueue, ActiveHandle>{sptr, &ptr->_mainWorkQueue});
+			smarter::shared_ptr<WorkQueue, ActiveHandle> {sptr, &ptr->_mainWorkQueue}
+		);
 		ptr->_pagingWorkQueue.selfPtr = remove_tag_cast(
-				smarter::shared_ptr<WorkQueue, ActiveHandle>{sptr, &ptr->_pagingWorkQueue});
+			smarter::shared_ptr<WorkQueue, ActiveHandle> {sptr, &ptr->_pagingWorkQueue}
+		);
 		return sptr;
 	}
 
@@ -82,11 +92,11 @@ public:
 		auto thisThread = getCurrentThread();
 
 		struct BlockingState {
-			// We need a shared_ptr since the thread might continue (and thus could be killed)
-			// immediately after we set the done flag.
+			// We need a shared_ptr since the thread might continue (and thus could be
+			// killed) immediately after we set the done flag.
 			smarter::shared_ptr<Thread> thread;
 			// Acquire-release semantics to publish the result of the async operation.
-			std::atomic<bool> done{false};
+			std::atomic<bool> done {false};
 		} bls {.thread = thisThread.lock()};
 
 		struct Receiver {
@@ -104,16 +114,18 @@ public:
 			BlockingState *blsp;
 		};
 
-		auto operation = async::execution::connect(std::move(s), Receiver{&bls});
-		if(async::execution::start_inline(operation))
+		auto operation = async::execution::connect(std::move(s), Receiver {&bls});
+		if(async::execution::start_inline(operation)) {
 			return;
+		}
 		while(true) {
-			if(bls.done.load(std::memory_order_acquire))
+			if(bls.done.load(std::memory_order_acquire)) {
 				break;
+			}
 			if(wq->check()) {
 				wq->run();
-				// Re-check the done flag since nested blocking (triggered by the WQ)
-				// might have consumed the unblock latch.
+				// Re-check the done flag since nested blocking (triggered by the
+				// WQ) might have consumed the unblock latch.
 				continue;
 			}
 			Thread::blockCurrent();
@@ -121,18 +133,18 @@ public:
 	}
 
 	template<typename Sender>
-	requires (!std::is_same_v<typename Sender::value_type, void>)
+	requires(!std::is_same_v<typename Sender::value_type, void>)
 	static typename Sender::value_type asyncBlockCurrent(Sender s, WorkQueue *wq) {
 		auto thisThread = getCurrentThread();
 
 		struct BlockingState {
-			// We need a shared_ptr since the thread might continue (and thus could be killed)
-			// immediately after we set the done flag.
+			// We need a shared_ptr since the thread might continue (and thus could be
+			// killed) immediately after we set the done flag.
 			smarter::shared_ptr<Thread> thread;
 			// Acquire-release semantics to publish the result of the async operation.
-			std::atomic<bool> done{false};
+			std::atomic<bool> done {false};
 			frg::optional<typename Sender::value_type> value;
-		} bls{.thread = thisThread.lock()};
+		} bls {.thread = thisThread.lock()};
 
 		struct Receiver {
 			void set_value_inline(typename Sender::value_type value) {
@@ -150,16 +162,18 @@ public:
 			BlockingState *blsp;
 		};
 
-		auto operation = async::execution::connect(std::move(s), Receiver{&bls});
-		if(async::execution::start_inline(operation))
+		auto operation = async::execution::connect(std::move(s), Receiver {&bls});
+		if(async::execution::start_inline(operation)) {
 			return std::move(*bls.value);
+		}
 		while(true) {
-			if(bls.done.load(std::memory_order_acquire))
+			if(bls.done.load(std::memory_order_acquire)) {
 				break;
+			}
 			if(wq->check()) {
 				wq->run();
-				// Re-check the done flag since nested blocking (triggered by the WQ)
-				// might have consumed the unblock latch.
+				// Re-check the done flag since nested blocking (triggered by the
+				// WQ) might have consumed the unblock latch.
 				continue;
 			}
 			Thread::blockCurrent();
@@ -198,16 +212,13 @@ public:
 	};
 
 	Thread(smarter::shared_ptr<Universe> universe,
-			smarter::shared_ptr<AddressSpace, BindableHandle> address_space,
-			AbiParameters abi);
+	       smarter::shared_ptr<AddressSpace, BindableHandle> address_space,
+	       AbiParameters abi);
 	~Thread();
 
-	WorkQueue *mainWorkQueue() {
-		return &_mainWorkQueue;
-	}
-	WorkQueue *pagingWorkQueue() {
-		return &_pagingWorkQueue;
-	}
+	WorkQueue *mainWorkQueue() { return &_mainWorkQueue; }
+
+	WorkQueue *pagingWorkQueue() { return &_pagingWorkQueue; }
 
 	UserContext &getContext();
 	smarter::borrowed_ptr<Universe> getUniverse();
@@ -228,11 +239,11 @@ public:
 	template<typename Receiver>
 	struct [[nodiscard]] ObserveOperation {
 		ObserveOperation(Thread *self, uint64_t inSeq, Receiver receiver)
-		: self_{self}, inSeq_{inSeq}, node_{.receiver = std::move(receiver)} { }
+		: self_ {self}
+		, inSeq_ {inSeq}
+		, node_ {.receiver = std::move(receiver)} {}
 
-		void start() {
-			self_->observe_(inSeq_, &node_);
-		}
+		void start() { self_->observe_(inSeq_, &node_); }
 
 	private:
 		Thread *self_;
@@ -257,16 +268,14 @@ public:
 		uint64_t inSeq;
 	};
 
-	ObserveSender observe(uint64_t inSeq) {
-		return {this, inSeq};
-	}
+	ObserveSender observe(uint64_t inSeq) { return {this, inSeq}; }
 
 	// ----------------------------------------------------------------------------------
 
 	// TODO: Do not expose these functions publically.
-	void dispose(ActiveHandle); // Called when shared_ptr refcount reaches zero.
+	void dispose(ActiveHandle);  // Called when shared_ptr refcount reaches zero.
 
-	[[ noreturn ]] void invoke() override;
+	[[noreturn]] void invoke() override;
 
 	void handlePreemption(IrqImageAccessor accessor) override;
 
@@ -325,7 +334,7 @@ private:
 	// On 0-1 transitions, we take _mutex and try to unblock the thread.
 	// Since _mutex enforces a total order, this guarantees correctness
 	// (i.e., that we never block when we should not).
-	std::atomic<bool> _unblockLatch{false};
+	std::atomic<bool> _unblockLatch {false};
 
 	Interrupt _lastInterrupt;
 	uint64_t _stateSeq;
@@ -340,6 +349,7 @@ private:
 
 	UserContext _userContext;
 	ExecutorContext _executorContext;
+
 public:
 	// TODO: This should be private.
 	Executor _executor;
@@ -353,12 +363,10 @@ private:
 		frg::locate_member<
 			ObserveNode,
 			frg::default_list_hook<ObserveNode>,
-			&ObserveNode::hook
-		>
-	>;
+			&ObserveNode::hook>>;
 
 	ObserveQueue _observeQueue;
 	frg::vector<uint8_t, KernelAlloc> _affinityMask;
 };
 
-} // namespace thor
+}  // namespace thor

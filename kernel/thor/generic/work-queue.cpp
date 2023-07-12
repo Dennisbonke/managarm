@@ -19,7 +19,7 @@ void WorkQueue::post(Worklet *worklet) {
 		invokeWakeup = wq->_localQueue.empty();
 		wq->_localQueue.push_back(worklet);
 		wq->_localPosted.store(true, std::memory_order_relaxed);
-	}else{
+	} else {
 		auto irqLock = frg::guard(&irqMutex());
 		auto lock = frg::guard(&wq->_mutex);
 
@@ -28,8 +28,9 @@ void WorkQueue::post(Worklet *worklet) {
 		wq->_lockedPosted.store(true, std::memory_order_relaxed);
 	}
 
-	if(invokeWakeup)
+	if(invokeWakeup) {
 		wq->wakeup();
+	}
 }
 
 bool WorkQueue::enter(Worklet *worklet) {
@@ -49,7 +50,7 @@ bool WorkQueue::enter(Worklet *worklet) {
 		invokeWakeup = wq->_localQueue.empty();
 		wq->_localQueue.push_back(worklet);
 		wq->_localPosted.store(true, std::memory_order_relaxed);
-	}else{
+	} else {
 		// Same logic as in post().
 		auto irqLock = frg::guard(&irqMutex());
 		auto lock = frg::guard(&wq->_mutex);
@@ -59,8 +60,9 @@ bool WorkQueue::enter(Worklet *worklet) {
 		wq->_lockedPosted.store(true, std::memory_order_relaxed);
 	}
 
-	if(invokeWakeup)
+	if(invokeWakeup) {
 		wq->wakeup();
+	}
 	return false;
 }
 
@@ -68,7 +70,7 @@ bool WorkQueue::check() {
 	// _localPosted is only accessed from the thread/fiber that runs the WQ.
 	// For _lockedPosted, see the comment in the header file.
 	return _localPosted.load(std::memory_order_relaxed)
-			|| _lockedPosted.load(std::memory_order_relaxed);
+	    || _lockedPosted.load(std::memory_order_relaxed);
 }
 
 void WorkQueue::run() {
@@ -80,12 +82,8 @@ void WorkQueue::run() {
 
 	frg::intrusive_list<
 		Worklet,
-		frg::locate_member<
-			Worklet,
-			frg::default_list_hook<Worklet>,
-			&Worklet::_hook
-		>
-	> pending;
+		frg::locate_member<Worklet, frg::default_list_hook<Worklet>, &Worklet::_hook>>
+		pending;
 	{
 		auto irqLock = frg::guard(&irqMutex());
 
@@ -112,4 +110,4 @@ void WorkQueue::run() {
 	_inRun.store(false, std::memory_order_relaxed);
 }
 
-} // namespace thor
+}  // namespace thor

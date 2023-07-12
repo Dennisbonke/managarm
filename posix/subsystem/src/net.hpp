@@ -8,4 +8,4 @@ namespace net {
 async::result<void> enumerateNetserver();
 async::result<helix::BorrowedLane> getNetLane();
 
-} // namespace net
+}  // namespace net

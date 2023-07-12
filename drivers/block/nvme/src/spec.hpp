@@ -43,6 +43,7 @@ struct PowerState {
 	uint8_t activeWorkScale;
 	uint8_t __reserved23[9];
 };
+
 static_assert(sizeof(PowerState) == 32);
 
 struct IdentifyController {
@@ -127,6 +128,7 @@ struct IdentifyController {
 	PowerState psd[32];
 	uint8_t vs[1024];
 };
+
 static_assert(sizeof(IdentifyController) == 0x1000);
 
 struct LbaFormat {
@@ -134,6 +136,7 @@ struct LbaFormat {
 	uint8_t ds;
 	uint8_t rp;
 };
+
 static_assert(sizeof(LbaFormat) == 4);
 
 struct IdentifyNamespace {
@@ -175,12 +178,14 @@ struct IdentifyNamespace {
 	uint8_t __reserved192[192];
 	uint8_t vs[3712];
 };
+
 static_assert(sizeof(IdentifyNamespace) == 0x1000);
 
 struct DataPointer {
 	uint64_t prp1;
 	uint64_t prp2;
 };
+
 static_assert(sizeof(DataPointer) == 16);
 
 struct CommonCommand {
@@ -265,6 +270,7 @@ union Command {
 	CreateSQCommand createSQ;
 	IdentifyCommand identify;
 };
+
 static_assert(sizeof(Command) == 64);
 
 struct CompletionEntry {
@@ -273,11 +279,13 @@ struct CompletionEntry {
 		uint32_t u32;
 		uint64_t u64;
 	} result;
+
 	uint16_t sqHead;
 	uint16_t sqId;
 	uint16_t commandId;
 	uint16_t status;
 };
+
 static_assert(sizeof(CompletionEntry) == 16);
 
-} // namespace spec
+}  // namespace spec

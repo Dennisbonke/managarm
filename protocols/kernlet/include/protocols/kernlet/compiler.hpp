@@ -12,5 +12,5 @@ enum class BindType {
 };
 
 async::result<void> connectKernletCompiler();
-async::result<helix::UniqueDescriptor> compile(void *code, size_t size,
-		std::vector<BindType> bind_types);
+async::result<helix::UniqueDescriptor>
+compile(void *code, size_t size, std::vector<BindType> bind_types);

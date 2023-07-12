@@ -1,28 +1,33 @@
 
-#include <queue>
-#include <map>
-#include <unordered_map>
-
-#include <arch/mem_space.hpp>
-#include <async/recurring-event.hpp>
-#include <async/mutex.hpp>
-#include <async/result.hpp>
-
 #include "spec.hpp"
 
-struct GfxDevice final : drm_core::Device, std::enable_shared_from_this<GfxDevice> {
+#include <arch/mem_space.hpp>
+#include <async/mutex.hpp>
+#include <async/recurring-event.hpp>
+#include <async/result.hpp>
+#include <map>
+#include <queue>
+#include <unordered_map>
+
+struct GfxDevice final
+: drm_core::Device
+, std::enable_shared_from_this<GfxDevice> {
 	struct FrameBuffer;
 
 	struct Configuration : drm_core::Configuration {
 		Configuration(GfxDevice *device)
-		: _device(device), _cursorUpdate(false), _cursorMove(false) { };
+		: _device(device)
+		, _cursorUpdate(false)
+		, _cursorMove(false) {};
 
-		bool capture(std::vector<drm_core::Assignment> assignment, std::unique_ptr<drm_core::AtomicState> & state) override;
+		bool
+		capture(std::vector<drm_core::Assignment> assignment,
+			std::unique_ptr<drm_core::AtomicState> &state) override;
 		void dispose() override;
-		void commit(std::unique_ptr<drm_core::AtomicState> & state) override;
+		void commit(std::unique_ptr<drm_core::AtomicState> &state) override;
 
 	private:
-		async::detached commitConfiguration(std::unique_ptr<drm_core::AtomicState> & state);
+		async::detached commitConfiguration(std::unique_ptr<drm_core::AtomicState> &state);
 
 		GfxDevice *_device;
 
@@ -34,12 +39,15 @@ struct GfxDevice final : drm_core::Device, std::enable_shared_from_this<GfxDevic
 		Plane(GfxDevice *device, PlaneType type);
 	};
 
-	struct BufferObject final : drm_core::BufferObject, std::enable_shared_from_this<BufferObject> {
+	struct BufferObject final
+	: drm_core::BufferObject
+	, std::enable_shared_from_this<BufferObject> {
 		BufferObject(GfxDevice *device, size_t size, helix::UniqueDescriptor mem);
 
 		std::shared_ptr<drm_core::BufferObject> sharedBufferObject() override;
 		size_t getSize() override;
 		std::pair<helix::BorrowedDescriptor, uint64_t> getMemory() override;
+
 	private:
 		size_t _size;
 		helix::UniqueDescriptor _mem;
@@ -67,8 +75,11 @@ struct GfxDevice final : drm_core::Device, std::enable_shared_from_this<GfxDevic
 	};
 
 	struct FrameBuffer final : drm_core::FrameBuffer {
-		FrameBuffer(GfxDevice *device, std::shared_ptr<GfxDevice::BufferObject> bo,
-				uint32_t pixel_pitch);
+		FrameBuffer(
+			GfxDevice *device,
+			std::shared_ptr<GfxDevice::BufferObject> bo,
+			uint32_t pixel_pitch
+		);
 
 		GfxDevice::BufferObject *getBufferObject();
 		uint32_t getPixelPitch();
@@ -83,11 +94,13 @@ struct GfxDevice final : drm_core::Device, std::enable_shared_from_this<GfxDevic
 		DeviceFifo(GfxDevice *device, helix::Mapping fifoMapping);
 
 		void initialize();
-		async::result<void> defineCursor(int width, int height, GfxDevice::BufferObject *bo);
+		async::result<void>
+		defineCursor(int width, int height, GfxDevice::BufferObject *bo);
 		void moveCursor(int x, int y);
 		void setCursorState(bool enabled);
 		bool hasCapability(caps capability);
 		async::result<void> updateRectangle(int x, int y, int w, int h);
+
 	private:
 		async::result<void *> reserve(size_t size);
 		void commit(size_t);
@@ -105,18 +118,25 @@ struct GfxDevice final : drm_core::Device, std::enable_shared_from_this<GfxDevic
 		bool _usingBounceBuf;
 	};
 
-	GfxDevice(protocols::hw::Device hw_device,
-			helix::Mapping fb,
-			helix::Mapping fifo,
-			helix::UniqueDescriptor io_ports, uint16_t io_base);
+	GfxDevice(
+		protocols::hw::Device hw_device,
+		helix::Mapping fb,
+		helix::Mapping fifo,
+		helix::UniqueDescriptor io_ports,
+		uint16_t io_base
+	);
 
 	async::detached initialize();
 	std::unique_ptr<drm_core::Configuration> createConfiguration() override;
-	std::pair<std::shared_ptr<drm_core::BufferObject>, uint32_t> createDumb(uint32_t width,
-			uint32_t height, uint32_t bpp) override;
-	std::shared_ptr<drm_core::FrameBuffer>
-			createFrameBuffer(std::shared_ptr<drm_core::BufferObject> bo,
-			uint32_t width, uint32_t height, uint32_t format, uint32_t pitch) override;
+	std::pair<std::shared_ptr<drm_core::BufferObject>, uint32_t>
+	createDumb(uint32_t width, uint32_t height, uint32_t bpp) override;
+	std::shared_ptr<drm_core::FrameBuffer> createFrameBuffer(
+		std::shared_ptr<drm_core::BufferObject> bo,
+		uint32_t width,
+		uint32_t height,
+		uint32_t format,
+		uint32_t pitch
+	) override;
 
 	std::tuple<int, int, int> driverVersion() override;
 	std::tuple<std::string, std::string, std::string> driverInfo() override;

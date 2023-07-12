@@ -1,18 +1,16 @@
-#include <frg/string.hpp>
+#include "kerncfg.frigg_pb.hpp"
+#include "mbus.frigg_pb.hpp"
 
-#include <thor-internal/universe.hpp>
+#include <frg/string.hpp>
 #include <thor-internal/coroutine.hpp>
 #include <thor-internal/fiber.hpp>
 #include <thor-internal/kerncfg.hpp>
 #include <thor-internal/ostrace.hpp>
 #include <thor-internal/profile.hpp>
+#include <thor-internal/ring-buffer.hpp>
 #include <thor-internal/stream.hpp>
 #include <thor-internal/timer.hpp>
-
-#include "kerncfg.frigg_pb.hpp"
-#include "mbus.frigg_pb.hpp"
-
-#include <thor-internal/ring-buffer.hpp>
+#include <thor-internal/universe.hpp>
 
 namespace thor {
 
@@ -23,11 +21,12 @@ extern frg::manual_box<LogRingBuffer> allocLog;
 namespace {
 
 coroutine<Error> handleReq(LaneHandle boundLane) {
-	auto [acceptError, lane] = co_await AcceptSender{boundLane};
-	if(acceptError != Error::success)
+	auto [acceptError, lane] = co_await AcceptSender {boundLane};
+	if(acceptError != Error::success) {
 		co_return acceptError;
+	}
 
-	auto [reqError, reqBuffer] = co_await RecvBufferSender{lane};
+	auto [reqError, reqBuffer] = co_await RecvBufferSender {lane};
 	assert(reqError == Error::success && "Unexpected mbus transaction");
 	managarm::kerncfg::CntRequest<KernelAlloc> req(*kernelAlloc);
 	req.ParseFromArray(reqBuffer.data(), reqBuffer.size());
@@ -39,23 +38,25 @@ coroutine<Error> handleReq(LaneHandle boundLane) {
 
 		frg::string<KernelAlloc> ser(*kernelAlloc);
 		resp.SerializeToString(&ser);
-		frg::unique_memory<KernelAlloc> respBuffer{*kernelAlloc, ser.size()};
+		frg::unique_memory<KernelAlloc> respBuffer {*kernelAlloc, ser.size()};
 		memcpy(respBuffer.data(), ser.data(), ser.size());
-		auto respError = co_await SendBufferSender{lane, std::move(respBuffer)};
+		auto respError = co_await SendBufferSender {lane, std::move(respBuffer)};
 		assert(respError == Error::success && "Unexpected mbus transaction");
-		frg::unique_memory<KernelAlloc> cmdlineBuffer{*kernelAlloc, kernelCommandLine->size()};
+		frg::unique_memory<KernelAlloc> cmdlineBuffer {
+			*kernelAlloc,
+			kernelCommandLine->size()};
 		memcpy(cmdlineBuffer.data(), kernelCommandLine->data(), kernelCommandLine->size());
-		auto cmdlineError = co_await SendBufferSender{lane, std::move(cmdlineBuffer)};
+		auto cmdlineError = co_await SendBufferSender {lane, std::move(cmdlineBuffer)};
 		assert(cmdlineError == Error::success && "Unexpected mbus transaction");
-	}else{
+	} else {
 		managarm::kerncfg::SvrResponse<KernelAlloc> resp(*kernelAlloc);
 		resp.set_error(managarm::kerncfg::Error::ILLEGAL_REQUEST);
 
 		frg::string<KernelAlloc> ser(*kernelAlloc);
 		resp.SerializeToString(&ser);
-		frg::unique_memory<KernelAlloc> respBuffer{*kernelAlloc, ser.size()};
+		frg::unique_memory<KernelAlloc> respBuffer {*kernelAlloc, ser.size()};
 		memcpy(respBuffer.data(), ser.data(), ser.size());
-		auto respError = co_await SendBufferSender{lane, std::move(respBuffer)};
+		auto respError = co_await SendBufferSender {lane, std::move(respBuffer)};
 		assert(respError == Error::success && "Unexpected mbus transaction");
 	}
 
@@ -63,17 +64,18 @@ coroutine<Error> handleReq(LaneHandle boundLane) {
 }
 
 coroutine<Error> handleByteRingReq(LogRingBuffer *ringBuffer, LaneHandle boundLane) {
-	auto [acceptError, lane] = co_await AcceptSender{boundLane};
-	if(acceptError != Error::success)
+	auto [acceptError, lane] = co_await AcceptSender {boundLane};
+	if(acceptError != Error::success) {
 		co_return acceptError;
+	}
 
-	auto [reqError, reqBuffer] = co_await RecvBufferSender{lane};
+	auto [reqError, reqBuffer] = co_await RecvBufferSender {lane};
 	assert(reqError == Error::success && "Unexpected mbus transaction");
 	managarm::kerncfg::CntRequest<KernelAlloc> req(*kernelAlloc);
 	req.ParseFromArray(reqBuffer.data(), reqBuffer.size());
 
 	if(req.req_type() == managarm::kerncfg::CntReqType::GET_BUFFER_CONTENTS) {
-		frg::unique_memory<KernelAlloc> dataBuffer{*kernelAlloc, req.size()};
+		frg::unique_memory<KernelAlloc> dataBuffer {*kernelAlloc, req.size()};
 
 		size_t progress = 0;
 
@@ -81,12 +83,16 @@ coroutine<Error> handleByteRingReq(LogRingBuffer *ringBuffer, LaneHandle boundLa
 		uint64_t effectivePtr;
 		uint64_t currentPtr;
 		while(true) {
-			auto [success, recordPtr, nextPtr, actualSize] = ringBuffer->dequeueAt(
-					req.dequeue(), dataBuffer.data(), req.size());
+			auto [success, recordPtr, nextPtr, actualSize] =
+				ringBuffer->dequeueAt(req.dequeue(), dataBuffer.data(), req.size());
 			if(success) {
-				assert(actualSize); // For now, we do not support size zero records.
-				if(actualSize == req.size())
-					infoLogger() << "thor: kerncfg truncates a ring buffer record" << frg::endlog;
+				assert(actualSize
+				);  // For now, we do not support size zero records.
+				if(actualSize == req.size()) {
+					infoLogger()
+						<< "thor: kerncfg truncates a ring buffer record"
+						<< frg::endlog;
+				}
 				effectivePtr = recordPtr;
 				currentPtr = nextPtr;
 				progress += actualSize;
@@ -99,21 +105,27 @@ coroutine<Error> handleByteRingReq(LogRingBuffer *ringBuffer, LaneHandle boundLa
 		// Extract further records. We stop on failure, or if we miss records.
 		while(true) {
 			auto [success, recordPtr, nextPtr, actualSize] = ringBuffer->dequeueAt(
-					currentPtr, static_cast<std::byte *>(dataBuffer.data()) + progress,
-					req.size() - progress);
-			if(recordPtr != currentPtr)
+				currentPtr,
+				static_cast<std::byte *>(dataBuffer.data()) + progress,
+				req.size() - progress
+			);
+			if(recordPtr != currentPtr) {
 				break;
+			}
 			if(success) {
-				assert(actualSize); // For now, we do not support size zero records.
-				if(actualSize == req.size() - progress)
+				assert(actualSize
+				);  // For now, we do not support size zero records.
+				if(actualSize == req.size() - progress) {
 					break;
+				}
 				currentPtr = nextPtr;
 				progress += actualSize;
 				continue;
 			}
 
-			if(progress >= req.watermark())
+			if(progress >= req.watermark()) {
 				break;
+			}
 
 			co_await ringBuffer->wait(nextPtr);
 		}
@@ -126,29 +138,28 @@ coroutine<Error> handleByteRingReq(LogRingBuffer *ringBuffer, LaneHandle boundLa
 
 		frg::string<KernelAlloc> ser(*kernelAlloc);
 		resp.SerializeToString(&ser);
-		frg::unique_memory<KernelAlloc> respBuffer{*kernelAlloc, ser.size()};
+		frg::unique_memory<KernelAlloc> respBuffer {*kernelAlloc, ser.size()};
 		memcpy(respBuffer.data(), ser.data(), ser.size());
-		auto respError = co_await SendBufferSender{lane, std::move(respBuffer)};
+		auto respError = co_await SendBufferSender {lane, std::move(respBuffer)};
 		assert(respError == Error::success && "Unexpected mbus transaction");
-		auto cmdlineError = co_await SendBufferSender{lane, std::move(dataBuffer)};
+		auto cmdlineError = co_await SendBufferSender {lane, std::move(dataBuffer)};
 		assert(cmdlineError == Error::success && "Unexpected mbus transaction");
-	}else{
+	} else {
 		managarm::kerncfg::SvrResponse<KernelAlloc> resp(*kernelAlloc);
 		resp.set_error(managarm::kerncfg::Error::ILLEGAL_REQUEST);
 
 		frg::string<KernelAlloc> ser(*kernelAlloc);
 		resp.SerializeToString(&ser);
-		frg::unique_memory<KernelAlloc> respBuffer{*kernelAlloc, ser.size()};
+		frg::unique_memory<KernelAlloc> respBuffer {*kernelAlloc, ser.size()};
 		memcpy(respBuffer.data(), ser.data(), ser.size());
-		auto respError = co_await SendBufferSender{lane, std::move(respBuffer)};
+		auto respError = co_await SendBufferSender {lane, std::move(respBuffer)};
 		assert(respError == Error::success && "Unexpected mbus transaction");
 	}
 
 	co_return Error::success;
 }
 
-
-} // anonymous namespace
+}  // anonymous namespace
 
 // ------------------------------------------------------------------------
 // mbus object creation and management.
@@ -160,7 +171,7 @@ coroutine<void> handleBind(LaneHandle objectLane);
 coroutine<void> handleByteRingBind(LogRingBuffer *ringBuffer, LaneHandle objectLane);
 
 coroutine<void> createObject(LaneHandle mbusLane) {
-	auto [offerError, lane] = co_await OfferSender{mbusLane};
+	auto [offerError, lane] = co_await OfferSender {mbusLane};
 	assert(offerError == Error::success && "Unexpected mbus transaction");
 
 	managarm::mbus::Property<KernelAlloc> cls_prop(*kernelAlloc);
@@ -175,28 +186,29 @@ coroutine<void> createObject(LaneHandle mbusLane) {
 
 	frg::string<KernelAlloc> ser(*kernelAlloc);
 	req.SerializeToString(&ser);
-	frg::unique_memory<KernelAlloc> reqBuffer{*kernelAlloc, ser.size()};
+	frg::unique_memory<KernelAlloc> reqBuffer {*kernelAlloc, ser.size()};
 	memcpy(reqBuffer.data(), ser.data(), ser.size());
-	auto reqError = co_await SendBufferSender{lane, std::move(reqBuffer)};
+	auto reqError = co_await SendBufferSender {lane, std::move(reqBuffer)};
 	assert(reqError == Error::success && "Unexpected mbus transaction");
 
-	auto [respError, respBuffer] = co_await RecvBufferSender{lane};
+	auto [respError, respBuffer] = co_await RecvBufferSender {lane};
 	assert(respError == Error::success && "Unexpected mbus transaction");
 	managarm::mbus::SvrResponse<KernelAlloc> resp(*kernelAlloc);
 	resp.ParseFromArray(respBuffer.data(), respBuffer.size());
 	assert(resp.error() == managarm::mbus::Error::SUCCESS);
 
-	auto [objectError, objectDescriptor] = co_await PullDescriptorSender{lane};
+	auto [objectError, objectDescriptor] = co_await PullDescriptorSender {lane};
 	assert(objectError == Error::success && "Unexpected mbus transaction");
 	assert(objectDescriptor.is<LaneDescriptor>());
 	auto objectLane = objectDescriptor.get<LaneDescriptor>().handle;
-	while(true)
+	while(true) {
 		co_await handleBind(objectLane);
+	}
 }
 
-coroutine<void> createByteRingObject(LogRingBuffer *ringBuffer,
-		LaneHandle mbusLane, const char *purpose) {
-	auto [offerError, lane] = co_await OfferSender{mbusLane};
+coroutine<void>
+createByteRingObject(LogRingBuffer *ringBuffer, LaneHandle mbusLane, const char *purpose) {
+	auto [offerError, lane] = co_await OfferSender {mbusLane};
 	assert(offerError == Error::success && "Unexpected mbus transaction");
 
 	managarm::mbus::Property<KernelAlloc> cls_prop(*kernelAlloc);
@@ -217,30 +229,31 @@ coroutine<void> createByteRingObject(LogRingBuffer *ringBuffer,
 
 	frg::string<KernelAlloc> ser(*kernelAlloc);
 	req.SerializeToString(&ser);
-	frg::unique_memory<KernelAlloc> reqBuffer{*kernelAlloc, ser.size()};
+	frg::unique_memory<KernelAlloc> reqBuffer {*kernelAlloc, ser.size()};
 	memcpy(reqBuffer.data(), ser.data(), ser.size());
-	auto reqError = co_await SendBufferSender{lane, std::move(reqBuffer)};
+	auto reqError = co_await SendBufferSender {lane, std::move(reqBuffer)};
 	assert(reqError == Error::success && "Unexpected mbus transaction");
 
-	auto [respError, respBuffer] = co_await RecvBufferSender{lane};
+	auto [respError, respBuffer] = co_await RecvBufferSender {lane};
 	assert(respError == Error::success && "Unexpected mbus transaction");
 	managarm::mbus::SvrResponse<KernelAlloc> resp(*kernelAlloc);
 	resp.ParseFromArray(respBuffer.data(), respBuffer.size());
 	assert(resp.error() == managarm::mbus::Error::SUCCESS);
 
-	auto [objectError, objectDescriptor] = co_await PullDescriptorSender{lane};
+	auto [objectError, objectDescriptor] = co_await PullDescriptorSender {lane};
 	assert(objectError == Error::success && "Unexpected mbus transaction");
 	assert(objectDescriptor.is<LaneDescriptor>());
 	auto objectLane = objectDescriptor.get<LaneDescriptor>().handle;
-	while(true)
+	while(true) {
 		co_await handleByteRingBind(ringBuffer, objectLane);
+	}
 }
 
 coroutine<void> handleBind(LaneHandle objectLane) {
-	auto [acceptError, lane] = co_await AcceptSender{objectLane};
+	auto [acceptError, lane] = co_await AcceptSender {objectLane};
 	assert(acceptError == Error::success && "Unexpected mbus transaction");
 
-	auto [reqError, reqBuffer] = co_await RecvBufferSender{lane};
+	auto [reqError, reqBuffer] = co_await RecvBufferSender {lane};
 	assert(reqError == Error::success && "Unexpected mbus transaction");
 	managarm::mbus::SvrRequest<KernelAlloc> req(*kernelAlloc);
 	req.ParseFromArray(reqBuffer.data(), reqBuffer.size());
@@ -251,24 +264,27 @@ coroutine<void> handleBind(LaneHandle objectLane) {
 
 	frg::string<KernelAlloc> ser(*kernelAlloc);
 	resp.SerializeToString(&ser);
-	frg::unique_memory<KernelAlloc> respBuffer{*kernelAlloc, ser.size()};
+	frg::unique_memory<KernelAlloc> respBuffer {*kernelAlloc, ser.size()};
 	memcpy(respBuffer.data(), ser.data(), ser.size());
-	auto respError = co_await SendBufferSender{lane, std::move(respBuffer)};
+	auto respError = co_await SendBufferSender {lane, std::move(respBuffer)};
 	assert(respError == Error::success && "Unexpected mbus transaction");
 
 	auto stream = createStream();
-	auto boundError = co_await PushDescriptorSender{lane, LaneDescriptor{stream.get<1>()}};
+	auto boundError = co_await PushDescriptorSender {lane, LaneDescriptor {stream.get<1>()}};
 	assert(boundError == Error::success && "Unexpected mbus transaction");
 	auto boundLane = stream.get<0>();
 
-	async::detach_with_allocator(*kernelAlloc, ([] (LaneHandle boundLane) -> coroutine<void> {
+	async::detach_with_allocator(*kernelAlloc, ([](LaneHandle boundLane) -> coroutine<void> {
 		while(true) {
 			auto error = co_await handleReq(boundLane);
-			if(error == Error::endOfLane)
+			if(error == Error::endOfLane) {
 				break;
-			if(isRemoteIpcError(error))
+			}
+			if(isRemoteIpcError(error)) {
 				infoLogger() << "thor: Aborting kerncfg request"
-						" after remote violated the protocol" << frg::endlog;
+						" after remote violated the protocol"
+					     << frg::endlog;
+			}
 			assert(error == Error::success);
 		}
 	})(boundLane));
@@ -276,10 +292,10 @@ coroutine<void> handleBind(LaneHandle objectLane) {
 
 // TODO: maybe don't completely duplicate this function twice?
 coroutine<void> handleByteRingBind(LogRingBuffer *ringBuffer, LaneHandle objectLane) {
-	auto [acceptError, lane] = co_await AcceptSender{objectLane};
+	auto [acceptError, lane] = co_await AcceptSender {objectLane};
 	assert(acceptError == Error::success && "Unexpected mbus transaction");
 
-	auto [reqError, reqBuffer] = co_await RecvBufferSender{lane};
+	auto [reqError, reqBuffer] = co_await RecvBufferSender {lane};
 	assert(reqError == Error::success && "Unexpected mbus transaction");
 	managarm::mbus::SvrRequest<KernelAlloc> req(*kernelAlloc);
 	req.ParseFromArray(reqBuffer.data(), reqBuffer.size());
@@ -290,31 +306,36 @@ coroutine<void> handleByteRingBind(LogRingBuffer *ringBuffer, LaneHandle objectL
 
 	frg::string<KernelAlloc> ser(*kernelAlloc);
 	resp.SerializeToString(&ser);
-	frg::unique_memory<KernelAlloc> respBuffer{*kernelAlloc, ser.size()};
+	frg::unique_memory<KernelAlloc> respBuffer {*kernelAlloc, ser.size()};
 	memcpy(respBuffer.data(), ser.data(), ser.size());
-	auto respError = co_await SendBufferSender{lane, std::move(respBuffer)};
+	auto respError = co_await SendBufferSender {lane, std::move(respBuffer)};
 	assert(respError == Error::success && "Unexpected mbus transaction");
 
 	auto stream = createStream();
-	auto boundError = co_await PushDescriptorSender{lane, LaneDescriptor{stream.get<1>()}};
+	auto boundError = co_await PushDescriptorSender {lane, LaneDescriptor {stream.get<1>()}};
 	assert(boundError == Error::success && "Unexpected mbus transaction");
 	auto boundLane = stream.get<0>();
 
-	async::detach_with_allocator(*kernelAlloc, ([] (LogRingBuffer *ringBuffer,
-			LaneHandle boundLane) -> coroutine<void> {
-		while(true) {
-			auto error = co_await handleByteRingReq(ringBuffer, boundLane);
-			if(error == Error::endOfLane)
-				break;
-			if(isRemoteIpcError(error))
-				infoLogger() << "thor: Aborting kerncfg request"
-						" after remote violated the protocol" << frg::endlog;
-			assert(error == Error::success);
-		}
-	})(ringBuffer, boundLane));
+	async::detach_with_allocator(
+		*kernelAlloc,
+		([](LogRingBuffer *ringBuffer, LaneHandle boundLane) -> coroutine<void> {
+			while(true) {
+				auto error = co_await handleByteRingReq(ringBuffer, boundLane);
+				if(error == Error::endOfLane) {
+					break;
+				}
+				if(isRemoteIpcError(error)) {
+					infoLogger() << "thor: Aborting kerncfg request"
+							" after remote violated the protocol"
+						     << frg::endlog;
+				}
+				assert(error == Error::success);
+			}
+		})(ringBuffer, boundLane)
+	);
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 void initializeKerncfg() {
 	// Create a fiber to manage requests to the kerncfg mbus object.
@@ -322,17 +343,31 @@ void initializeKerncfg() {
 		async::detach_with_allocator(*kernelAlloc, createObject(*mbusClient));
 
 #ifdef KERNEL_LOG_ALLOCATIONS
-		async::detach_with_allocator(*kernelAlloc,
-				createByteRingObject(allocLog.get(), *mbusClient, "heap-trace"));
+		async::detach_with_allocator(
+			*kernelAlloc,
+			createByteRingObject(allocLog.get(), *mbusClient, "heap-trace")
+		);
 #endif
 
 		if(wantKernelProfile)
-			async::detach_with_allocator(*kernelAlloc,
-					createByteRingObject(getGlobalProfileRing(), *mbusClient, "kernel-profile"));
+			async::detach_with_allocator(
+				*kernelAlloc,
+				createByteRingObject(
+					getGlobalProfileRing(),
+					*mbusClient,
+					"kernel-profile"
+				)
+			);
 		if(wantOsTrace)
-			async::detach_with_allocator(*kernelAlloc,
-					createByteRingObject(getGlobalOsTraceRing(), *mbusClient, "os-trace"));
+			async::detach_with_allocator(
+				*kernelAlloc,
+				createByteRingObject(
+					getGlobalOsTraceRing(),
+					*mbusClient,
+					"os-trace"
+				)
+			);
 	});
 }
 
-} // namespace thor
+}  // namespace thor

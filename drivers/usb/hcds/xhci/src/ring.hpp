@@ -1,12 +1,11 @@
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
+#include "trb.hpp"
 
 #include <arch/dma_pool.hpp>
 #include <async/oneshot-event.hpp>
-
-#include "trb.hpp"
+#include <cstddef>
+#include <cstdint>
 
 struct Event {
 	TrbType type;

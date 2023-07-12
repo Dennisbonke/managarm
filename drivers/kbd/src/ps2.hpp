@@ -1,22 +1,18 @@
 #include <arch/io_space.hpp>
-#include <async/result.hpp>
+#include <array>
 #include <async/queue.hpp>
+#include <async/result.hpp>
+#include <functional>
 #include <helix/ipc.hpp>
 #include <libevbackend.hpp>
-#include <array>
-#include <vector>
 #include <memory>
-#include <functional>
 #include <type_traits>
+#include <vector>
 
 struct stl_allocator {
-	void *allocate(size_t size) {
-		return operator new(size);
-	}
+	void *allocate(size_t size) { return operator new(size); }
 
-	void deallocate(void *p, size_t) {
-		return operator delete(p);
-	}
+	void deallocate(void *p, size_t) { return operator delete(p); }
 };
 
 struct NoDevice {};
@@ -28,33 +24,38 @@ enum class Ps2Error {
 };
 
 namespace controller_cmd {
-	struct DisablePort {};
-	struct EnablePort {};
-	struct GetByte0 {};
-	struct SetByte0 {};
-	struct SendBytePort2 {};
-}
+struct DisablePort {};
+
+struct EnablePort {};
+
+struct GetByte0 {};
+
+struct SetByte0 {};
+
+struct SendBytePort2 {};
+}  // namespace controller_cmd
 
 namespace device_cmd {
-	struct DisableScan {};
-	struct EnableScan {};
-	struct Identify {};
+struct DisableScan {};
 
-	// mouse specific
-	struct SetReportRate {};
+struct EnableScan {};
 
-	// keyboard specific
-	struct SetScancodeSet {};
-	struct GetScancodeSet {};
-}
+struct Identify {};
+
+// mouse specific
+struct SetReportRate {};
+
+// keyboard specific
+struct SetScancodeSet {};
+
+struct GetScancodeSet {};
+}  // namespace device_cmd
 
 template<typename T>
 struct FlagGuard {
-	FlagGuard(T &flag, T target)
-	: _flag{flag}, _target{target} {}
-	~FlagGuard() {
-		_flag = _target;
-	}
+	FlagGuard(T &flag, T target) : _flag {flag}, _target {target} {}
+
+	~FlagGuard() { _flag = _target; }
 
 private:
 	T &_flag;
@@ -85,26 +86,18 @@ struct Controller {
 
 		async::result<void> init();
 
-		int getIndex() {
-			return _port;
-		}
+		int getIndex() { return _port; }
 
-		bool isDead() {
-			return _dead;
-		}
+		bool isDead() { return _dead; }
 
-		DeviceType deviceType() {
-			return _deviceType;
-		}
+		DeviceType deviceType() { return _deviceType; }
 
 		void pushByte(uint8_t byte);
 		async::result<std::optional<uint8_t>> pullByte(async::cancellation_token ct = {});
 
-		async::result<frg::expected<Ps2Error>>
-		submitCommand(device_cmd::DisableScan tag);
+		async::result<frg::expected<Ps2Error>> submitCommand(device_cmd::DisableScan tag);
 
-		async::result<frg::expected<Ps2Error>>
-		submitCommand(device_cmd::EnableScan tag);
+		async::result<frg::expected<Ps2Error>> submitCommand(device_cmd::EnableScan tag);
 
 		async::result<frg::expected<Ps2Error, DeviceType>>
 		submitCommand(device_cmd::Identify tag);
@@ -124,8 +117,7 @@ struct Controller {
 	};
 
 	struct KbdDevice final : Device {
-		KbdDevice(Port *port)
-		: _port{port} { }
+		KbdDevice(Port *port) : _port {port} {}
 
 		virtual async::result<void> run() override;
 
@@ -144,8 +136,7 @@ struct Controller {
 	};
 
 	struct MouseDevice final : Device {
-		MouseDevice(Port *port)
-		: _port{port} { }
+		MouseDevice(Port *port) : _port {port} {}
 
 		virtual async::result<void> run() override;
 
@@ -175,7 +166,7 @@ private:
 	void sendDataByte(uint8_t byte);
 	std::optional<uint8_t> recvResponseByte(uint64_t timeout = 0);
 
-	std::array<Port *, 2> _ports{};
+	std::array<Port *, 2> _ports {};
 	bool _hasSecondPort;
 	bool _portsOwnData = false;
 
@@ -185,6 +176,4 @@ private:
 	HelHandle _irq12Handle;
 	helix::UniqueIrq _irq1;
 	helix::UniqueIrq _irq12;
-
 };
-

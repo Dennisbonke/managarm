@@ -1,7 +1,7 @@
 #pragma once
 
-#include <frg/variant.hpp>
 #include <assert.h>
+#include <frg/variant.hpp>
 #include <smarter.hpp>
 #include <thor-internal/mm-rc.hpp>
 #include <thor-internal/virtualization.hpp>
@@ -23,15 +23,14 @@ struct BoundKernlet;
 struct ActiveHandle;
 
 struct QueueDescriptor {
-	QueueDescriptor(smarter::shared_ptr<IpcQueue> queue)
-	: queue(std::move(queue)) { }
+	QueueDescriptor(smarter::shared_ptr<IpcQueue> queue) : queue(std::move(queue)) {}
 
 	smarter::shared_ptr<IpcQueue> queue;
 };
 
 struct UniverseDescriptor {
 	UniverseDescriptor(smarter::shared_ptr<Universe> universe)
-	: universe(std::move(universe)) { }
+	: universe(std::move(universe)) {}
 
 	smarter::shared_ptr<Universe> universe;
 };
@@ -41,44 +40,43 @@ struct UniverseDescriptor {
 // --------------------------------------------------------
 
 struct MemoryViewDescriptor {
-	MemoryViewDescriptor(smarter::shared_ptr<MemoryView> memory)
-	: memory(std::move(memory)) { }
+	MemoryViewDescriptor(smarter::shared_ptr<MemoryView> memory) : memory(std::move(memory)) {}
 
 	smarter::shared_ptr<MemoryView> memory;
 };
 
 struct MemorySliceDescriptor {
-	MemorySliceDescriptor(smarter::shared_ptr<MemorySlice> slice)
-	: slice(std::move(slice)) { }
+	MemorySliceDescriptor(smarter::shared_ptr<MemorySlice> slice) : slice(std::move(slice)) {}
 
 	smarter::shared_ptr<MemorySlice> slice;
 };
 
 struct AddressSpaceDescriptor {
 	AddressSpaceDescriptor(smarter::shared_ptr<AddressSpace, BindableHandle> space)
-	: space(std::move(space)) { }
+	: space(std::move(space)) {}
 
 	smarter::shared_ptr<AddressSpace, BindableHandle> space;
 };
 
 struct MemoryViewLockDescriptor {
 	MemoryViewLockDescriptor(smarter::shared_ptr<NamedMemoryViewLock> lock)
-	: lock(std::move(lock)) { }
+	: lock(std::move(lock)) {}
 
 	smarter::shared_ptr<NamedMemoryViewLock> lock;
 };
 
 struct VirtualizedSpaceDescriptor {
 	VirtualizedSpaceDescriptor(smarter::shared_ptr<VirtualizedPageSpace> space)
-	: space(std::move(space)) { }
+	: space(std::move(space)) {}
 
 	smarter::shared_ptr<VirtualizedPageSpace> space;
 };
 
 struct VirtualizedCpuDescriptor {
-	VirtualizedCpuDescriptor() : vcpu(nullptr) { }
+	VirtualizedCpuDescriptor() : vcpu(nullptr) {}
+
 	VirtualizedCpuDescriptor(smarter::shared_ptr<VirtualizedCpu> vcpu)
-	: vcpu(std::move(vcpu)) { }
+	: vcpu(std::move(vcpu)) {}
 
 	smarter::shared_ptr<VirtualizedCpu> vcpu;
 };
@@ -89,7 +87,7 @@ struct VirtualizedCpuDescriptor {
 
 struct ThreadDescriptor {
 	ThreadDescriptor(smarter::shared_ptr<Thread, ActiveHandle> thread)
-	: thread(std::move(thread)) { }
+	: thread(std::move(thread)) {}
 
 	smarter::shared_ptr<Thread, ActiveHandle> thread;
 };
@@ -101,8 +99,9 @@ struct ThreadDescriptor {
 struct StreamControl;
 struct Stream;
 
-struct AdoptLane { };
-static constexpr AdoptLane adoptLane;
+struct AdoptLane {};
+
+constexpr static AdoptLane adoptLane;
 
 // TODO: implement SharedLaneHandle + UnsafeLaneHandle?
 struct LaneHandle {
@@ -113,37 +112,28 @@ struct LaneHandle {
 	}
 
 	// Initialize _lane so that the compiler does not complain about uninitialized values.
-	LaneHandle()
-	: _lane{-1} { };
+	LaneHandle() : _lane {-1} {};
 
 	explicit LaneHandle(AdoptLane, smarter::borrowed_ptr<Stream> stream, int lane)
-	: _stream(stream), _lane(lane) { }
+	: _stream(stream)
+	, _lane(lane) {}
 
 	LaneHandle(const LaneHandle &other);
 
-	LaneHandle(LaneHandle &&other)
-	: LaneHandle() {
-		swap(*this, other);
-	}
+	LaneHandle(LaneHandle &&other) : LaneHandle() { swap(*this, other); }
 
 	~LaneHandle();
 
-	explicit operator bool () {
-		return static_cast<bool>(_stream);
-	}
+	explicit operator bool() { return static_cast<bool>(_stream); }
 
-	LaneHandle &operator= (LaneHandle other) {
+	LaneHandle &operator=(LaneHandle other) {
 		swap(*this, other);
 		return *this;
 	}
 
-	smarter::borrowed_ptr<Stream> getStream() {
-		return _stream;
-	}
+	smarter::borrowed_ptr<Stream> getStream() { return _stream; }
 
-	int getLane() {
-		return _lane;
-	}
+	int getLane() { return _lane; }
 
 private:
 	smarter::borrowed_ptr<Stream> _stream;
@@ -153,8 +143,7 @@ private:
 struct LaneDescriptor {
 	LaneDescriptor() = default;
 
-	explicit LaneDescriptor(LaneHandle handle)
-	: handle(std::move(handle)) { }
+	explicit LaneDescriptor(LaneHandle handle) : handle(std::move(handle)) {}
 
 	LaneHandle handle;
 };
@@ -169,21 +158,19 @@ struct BitsetEvent;
 
 struct OneshotEventDescriptor {
 	OneshotEventDescriptor(smarter::shared_ptr<OneshotEvent> event)
-	: event{std::move(event)} { }
+	: event {std::move(event)} {}
 
 	smarter::shared_ptr<OneshotEvent> event;
 };
 
 struct BitsetEventDescriptor {
-	BitsetEventDescriptor(smarter::shared_ptr<BitsetEvent> event)
-	: event{std::move(event)} { }
+	BitsetEventDescriptor(smarter::shared_ptr<BitsetEvent> event) : event {std::move(event)} {}
 
 	smarter::shared_ptr<BitsetEvent> event;
 };
 
 struct IrqDescriptor {
-	IrqDescriptor(smarter::shared_ptr<IrqObject> irq)
-	: irq{std::move(irq)} { }
+	IrqDescriptor(smarter::shared_ptr<IrqObject> irq) : irq {std::move(irq)} {}
 
 	smarter::shared_ptr<IrqObject> irq;
 };
@@ -193,8 +180,7 @@ struct IrqDescriptor {
 // --------------------------------------------------------
 
 struct IoDescriptor {
-	IoDescriptor(smarter::shared_ptr<IoSpace> io_space)
-	: ioSpace(std::move(io_space)) { }
+	IoDescriptor(smarter::shared_ptr<IoSpace> io_space) : ioSpace(std::move(io_space)) {}
 
 	smarter::shared_ptr<IoSpace> ioSpace;
 };
@@ -205,14 +191,14 @@ struct IoDescriptor {
 
 struct KernletObjectDescriptor {
 	KernletObjectDescriptor(smarter::shared_ptr<KernletObject> kernlet_object)
-	: kernletObject(std::move(kernlet_object)) { }
+	: kernletObject(std::move(kernlet_object)) {}
 
 	smarter::shared_ptr<KernletObject> kernletObject;
 };
 
 struct BoundKernletDescriptor {
 	BoundKernletDescriptor(smarter::shared_ptr<BoundKernlet> bound_kernlet)
-	: boundKernlet(std::move(bound_kernlet)) { }
+	: boundKernlet(std::move(bound_kernlet)) {}
 
 	smarter::shared_ptr<BoundKernlet> boundKernlet;
 };
@@ -233,8 +219,8 @@ typedef frg::variant<
 	BitsetEventDescriptor,
 	IoDescriptor,
 	KernletObjectDescriptor,
-	BoundKernletDescriptor
-> AnyDescriptor;
+	BoundKernletDescriptor>
+	AnyDescriptor;
 
 // --------------------------------------------------------
 // Universe.
@@ -257,14 +243,9 @@ public:
 	Lock lock;
 
 private:
-	frg::hash_map<
-		Handle,
-		AnyDescriptor,
-		frg::hash<Handle>,
-		KernelAlloc
-	> _descriptorMap;
+	frg::hash_map<Handle, AnyDescriptor, frg::hash<Handle>, KernelAlloc> _descriptorMap;
 
 	Handle _nextHandle;
 };
 
-} // namespace thor
+}  // namespace thor

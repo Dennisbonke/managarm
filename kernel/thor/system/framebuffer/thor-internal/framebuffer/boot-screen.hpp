@@ -8,8 +8,8 @@ struct TextDisplay {
 	virtual int getWidth() = 0;
 	virtual int getHeight() = 0;
 
-	virtual void setChars(unsigned int x, unsigned int y,
-			const char *c, int count, int fg, int bg) = 0;
+	virtual void
+	setChars(unsigned int x, unsigned int y, const char *c, int count, int fg, int bg) = 0;
 	virtual void setBlanks(unsigned int x, unsigned int y, int count, int bg) = 0;
 
 protected:
@@ -24,11 +24,11 @@ struct BootScreen final : LogHandler {
 
 	private:
 		BootScreen *_screen;
-		
+
 		int _csiState;
 		int _modeStack[4];
 		int _modeCount;
-		
+
 		int _x;
 		int _y;
 		int _fg = 15;
@@ -49,4 +49,4 @@ private:
 	Formatter _fmt;
 };
 
-} // namespace thor
+}  // namespace thor

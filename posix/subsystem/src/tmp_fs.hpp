@@ -8,4 +8,4 @@ std::shared_ptr<FsNode> createMemoryNode(std::string path);
 
 std::shared_ptr<FsLink> createRoot();
 
-} // namespace tmp_fs
+}  // namespace tmp_fs

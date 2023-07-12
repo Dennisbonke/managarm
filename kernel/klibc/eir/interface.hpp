@@ -14,7 +14,7 @@ typedef uint64_t EirSize;
 struct EirRegion {
 	EirPtr address;
 	EirSize length;
-	EirSize order; // TODO: This could be an int.
+	EirSize order;  // TODO: This could be an int.
 	EirSize numRoots;
 	EirPtr buddyTree;
 };

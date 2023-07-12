@@ -6,24 +6,24 @@
 namespace spec {
 
 namespace format {
-	inline constexpr uint32_t bgrx = 2;
-	inline constexpr uint32_t xrgb = 4;
-}
+constexpr inline uint32_t bgrx = 2;
+constexpr inline uint32_t xrgb = 4;
+}  // namespace format
 
 namespace cmd {
-	inline constexpr uint32_t getDisplayInfo = 0x100;
-	inline constexpr uint32_t create2d = 0x101;
-	inline constexpr uint32_t setScanout = 0x103;
-	inline constexpr uint32_t resourceFlush = 0x104;
-	inline constexpr uint32_t xferToHost2d = 0x105;
-	inline constexpr uint32_t attachBacking = 0x106;
+constexpr inline uint32_t getDisplayInfo = 0x100;
+constexpr inline uint32_t create2d = 0x101;
+constexpr inline uint32_t setScanout = 0x103;
+constexpr inline uint32_t resourceFlush = 0x104;
+constexpr inline uint32_t xferToHost2d = 0x105;
+constexpr inline uint32_t attachBacking = 0x106;
 
-} //namespace cmd
+}  // namespace cmd
 
 namespace resp {
-	inline constexpr uint32_t noData = 0x1100;
-	inline constexpr uint32_t displayInfo = 0x1101;
-} //namespace resp
+constexpr inline uint32_t noData = 0x1100;
+constexpr inline uint32_t displayInfo = 0x1101;
+}  // namespace resp
 
 struct Header {
 	uint32_t type;
@@ -42,6 +42,7 @@ struct Rect {
 
 struct DisplayInfo {
 	Header header;
+
 	struct {
 		Rect rect;
 		uint32_t enabled;
@@ -92,8 +93,7 @@ struct ResourceFlush {
 };
 
 namespace cfg {
-	inline constexpr arch::scalar_register<uint32_t> numScanouts(8);
-} //namespace cfg
+constexpr inline arch::scalar_register<uint32_t> numScanouts(8);
+}  // namespace cfg
 
-
-} //namespace spec
+}  // namespace spec

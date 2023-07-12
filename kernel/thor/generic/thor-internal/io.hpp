@@ -21,4 +21,4 @@ private:
 	frg::vector<uintptr_t, KernelAlloc> p_ports;
 };
 
-} // namespace thor
+}  // namespace thor

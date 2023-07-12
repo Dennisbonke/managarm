@@ -60,41 +60,41 @@ enum class IrqIds {
 };
 
 namespace uart_register {
-	arch::scalar_register<uint8_t> data(0);
-	arch::bit_register<uint8_t> irqEnable(1);
-	arch::scalar_register<uint8_t> baudLow(0);
-	arch::scalar_register<uint8_t> baudHigh(1);
-	arch::bit_register<uint8_t> irqIdentification(2);
-	arch::bit_register<uint8_t> fifoControl(2);
-	arch::bit_register<uint8_t> lineControl(3);
-	arch::bit_register<uint8_t> lineStatus(5);
-}
+arch::scalar_register<uint8_t> data(0);
+arch::bit_register<uint8_t> irqEnable(1);
+arch::scalar_register<uint8_t> baudLow(0);
+arch::scalar_register<uint8_t> baudHigh(1);
+arch::bit_register<uint8_t> irqIdentification(2);
+arch::bit_register<uint8_t> fifoControl(2);
+arch::bit_register<uint8_t> lineControl(3);
+arch::bit_register<uint8_t> lineStatus(5);
+}  // namespace uart_register
 
 namespace irq_enable {
-	arch::field<uint8_t, IrqCtrl> dataAvailable(0, 1);
-	arch::field<uint8_t, IrqCtrl> txEmpty(1, 1);
-	arch::field<uint8_t, IrqCtrl> lineStatus(2, 1);
-	arch::field<uint8_t, IrqCtrl> modem(3, 1);
-}
+arch::field<uint8_t, IrqCtrl> dataAvailable(0, 1);
+arch::field<uint8_t, IrqCtrl> txEmpty(1, 1);
+arch::field<uint8_t, IrqCtrl> lineStatus(2, 1);
+arch::field<uint8_t, IrqCtrl> modem(3, 1);
+}  // namespace irq_enable
 
 namespace fifo_control {
-	arch::field<uint8_t, FifoCtrl> fifoEnable(0, 1);
-	arch::field<uint8_t, FifoCtrl> fifoIrqLvl(6, 2);
-}
+arch::field<uint8_t, FifoCtrl> fifoEnable(0, 1);
+arch::field<uint8_t, FifoCtrl> fifoIrqLvl(6, 2);
+}  // namespace fifo_control
 
 namespace line_control {
-	arch::field<uint8_t, DataBits> dataBits(0, 2);
-	arch::field<uint8_t, StopBits> stopBit(2, 1);
-	arch::field<uint8_t, Parity> parityBits(3, 3);
-	arch::field<uint8_t, bool> dlab(7, 1);
-}
+arch::field<uint8_t, DataBits> dataBits(0, 2);
+arch::field<uint8_t, StopBits> stopBit(2, 1);
+arch::field<uint8_t, Parity> parityBits(3, 3);
+arch::field<uint8_t, bool> dlab(7, 1);
+}  // namespace line_control
 
 namespace line_status {
-	arch::field<uint8_t, bool> dataReady(0, 1);
-	arch::field<uint8_t, bool> txReady(5, 1);
-}
+arch::field<uint8_t, bool> dataReady(0, 1);
+arch::field<uint8_t, bool> txReady(5, 1);
+}  // namespace line_status
 
 namespace irq_ident_register {
-	arch::field<uint8_t, bool> ignore(0, 1);
-	arch::field<uint8_t, IrqIds> id(1, 3);
-}
+arch::field<uint8_t, bool> ignore(0, 1);
+arch::field<uint8_t, IrqIds> id(1, 3);
+}  // namespace irq_ident_register

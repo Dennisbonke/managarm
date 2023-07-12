@@ -5,7 +5,7 @@
 namespace thor {
 
 initgraph::Stage *getFibersAvailableStage() {
-	static initgraph::Stage s{&globalInitEngine, "generic.fibers-available"};
+	static initgraph::Stage s {&globalInitEngine, "generic.fibers-available"};
 	return &s;
 }
 
@@ -17,12 +17,14 @@ void KernelFiber::blockCurrent(FiberBlocker *blocker) {
 
 		StatelessIrqLock irq_lock;
 		auto lock = frg::guard(&this_fiber->_mutex);
-		
+
 		// Those are the important tests; they are protected by the fiber's mutex.
-		if(blocker->_done)
+		if(blocker->_done) {
 			break;
-		if(this_fiber->_associatedWorkQueue->check())
+		}
+		if(this_fiber->_associatedWorkQueue->check()) {
 			continue;
+		}
 
 		assert(!this_fiber->_blocked);
 		this_fiber->_blocked = true;
@@ -32,14 +34,23 @@ void KernelFiber::blockCurrent(FiberBlocker *blocker) {
 		Scheduler::suspendCurrent();
 		localScheduler()->forceReschedule();
 
-		forkExecutor([&] {
-			runOnStack([] (Continuation cont, Executor *executor,
-					frg::unique_lock<frg::ticket_spinlock> lock) {
-				scrubStack(executor, cont);
-				lock.unlock();
-				localScheduler()->commitReschedule();
-			}, getCpuData()->detachedStack.base(), &this_fiber->_executor, std::move(lock));
-		}, &this_fiber->_executor);
+		forkExecutor(
+			[&] {
+				runOnStack(
+					[](Continuation cont,
+					   Executor *executor,
+					   frg::unique_lock<frg::ticket_spinlock> lock) {
+						scrubStack(executor, cont);
+						lock.unlock();
+						localScheduler()->commitReschedule();
+					},
+					getCpuData()->detachedStack.base(),
+					&this_fiber->_executor,
+					std::move(lock)
+				);
+			},
+			&this_fiber->_executor
+		);
 	}
 }
 
@@ -59,29 +70,28 @@ void KernelFiber::unblockOther(FiberBlocker *blocker) {
 	assert(!blocker->_done);
 	blocker->_done = true;
 
-	if(!fiber->_blocked)
+	if(!fiber->_blocked) {
 		return;
-	
+	}
+
 	fiber->_blocked = false;
 	Scheduler::resume(fiber);
 }
 
-void KernelFiber::run(UniqueKernelStack stack,
-		void (*function)(void *), void *argument) {
+void KernelFiber::run(UniqueKernelStack stack, void (*function)(void *), void *argument) {
 	AbiParameters params;
-	params.ip = (uintptr_t)function;
-	params.argument = (uintptr_t)argument;
+	params.ip = (uintptr_t) function;
+	params.argument = (uintptr_t) argument;
 
 	auto fiber = frg::construct<KernelFiber>(*kernelAlloc, std::move(stack), params);
 	Scheduler::associate(fiber, localScheduler());
 	Scheduler::resume(fiber);
 }
 
-KernelFiber *KernelFiber::post(UniqueKernelStack stack,
-		void (*function)(void *), void *argument) {
+KernelFiber *KernelFiber::post(UniqueKernelStack stack, void (*function)(void *), void *argument) {
 	AbiParameters params;
-	params.ip = (uintptr_t)function;
-	params.argument = (uintptr_t)argument;
+	params.ip = (uintptr_t) function;
+	params.argument = (uintptr_t) argument;
 
 	auto fiber = frg::construct<KernelFiber>(*kernelAlloc, std::move(stack), params);
 	Scheduler::associate(fiber, localScheduler());
@@ -89,9 +99,11 @@ KernelFiber *KernelFiber::post(UniqueKernelStack stack,
 }
 
 KernelFiber::KernelFiber(UniqueKernelStack stack, AbiParameters abi)
-: _blocked{false}, _fiberContext{std::move(stack)}, _executor{&_fiberContext, abi} {
+: _blocked {false}
+, _fiberContext {std::move(stack)}
+, _executor {&_fiberContext, abi} {
 	_associatedWorkQueue = smarter::allocate_shared<AssociatedWorkQueue>(*kernelAlloc, this);
-	_associatedWorkQueue->selfPtr = smarter::shared_ptr<WorkQueue>{_associatedWorkQueue};
+	_associatedWorkQueue->selfPtr = smarter::shared_ptr<WorkQueue> {_associatedWorkQueue};
 }
 
 void KernelFiber::invoke() {
@@ -110,8 +122,9 @@ void KernelFiber::AssociatedWorkQueue::wakeup() {
 	auto irq_lock = frg::guard(&irqMutex());
 	auto lock = frg::guard(&fiber_->_mutex);
 
-	if(!fiber_->_blocked)
+	if(!fiber_->_blocked) {
 		return;
+	}
 
 	fiber_->_blocked = false;
 	Scheduler::resume(fiber_);
@@ -126,5 +139,4 @@ KernelFiber *thisFiber() {
 	return getCpuData()->activeFiber;
 }
 
-} // namespace thor
-
+}  // namespace thor

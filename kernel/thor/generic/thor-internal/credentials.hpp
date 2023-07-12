@@ -5,11 +5,10 @@ namespace thor {
 struct Credentials {
 	Credentials();
 
-	const char *credentials() {
-		return _credentials;
-	}
+	const char *credentials() { return _credentials; }
+
 protected:
 	char _credentials[16];
 };
 
-}
+}  // namespace thor

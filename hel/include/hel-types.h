@@ -16,4 +16,4 @@ typedef int64_t HelHandle;
 
 typedef int64_t HelNanotime;
 
-#endif // HEL_TYPES_H
+#endif  // HEL_TYPES_H

@@ -1,39 +1,25 @@
 #pragma once
 
+#include "core.hpp"
 #include "fwd-decls.hpp"
-
-#include <map>
-#include <vector>
 
 #include <helix/memory.hpp>
 #include <libdrm/drm.h>
-
-#include "core.hpp"
+#include <map>
+#include <vector>
 
 namespace drm_core {
 
-struct IntPropertyType {
+struct IntPropertyType {};
 
-};
+struct ObjectPropertyType {};
 
-struct ObjectPropertyType {
+struct BlobPropertyType {};
 
-};
+struct EnumPropertyType {};
 
-struct BlobPropertyType {
-
-};
-
-struct EnumPropertyType {
-
-};
-
-using PropertyType = std::variant<
-	IntPropertyType,
-	ObjectPropertyType,
-	BlobPropertyType,
-	EnumPropertyType
->;
+using PropertyType =
+	std::variant<IntPropertyType, ObjectPropertyType, BlobPropertyType, EnumPropertyType>;
 
 enum PropertyId {
 	invalid,
@@ -54,10 +40,14 @@ enum PropertyId {
 };
 
 struct Property {
-	Property(PropertyId id, PropertyType property_type, std::string name) : Property(id, property_type, name, 0) { }
+	Property(PropertyId id, PropertyType property_type, std::string name)
+	: Property(id, property_type, name, 0) {}
 
 	Property(PropertyId id, PropertyType property_type, std::string name, uint32_t flags)
-	: _id(id), _flags(flags), _propertyType(property_type), _name(name) {
+	: _id(id)
+	, _flags(flags)
+	, _propertyType(property_type)
+	, _name(name) {
 		assert(name.length() < DRM_PROP_NAME_LEN);
 
 		if(std::holds_alternative<EnumPropertyType>(_propertyType)) {
@@ -67,14 +57,14 @@ struct Property {
 
 	virtual ~Property() = default;
 
-	virtual bool validate(const Assignment& assignment);
+	virtual bool validate(const Assignment &assignment);
 
 	PropertyId id();
 	uint32_t flags();
 	PropertyType propertyType();
 	std::string name();
 	void addEnumInfo(uint64_t value, std::string name);
-	const std::unordered_map<uint64_t, std::string>& enumInfo();
+	const std::unordered_map<uint64_t, std::string> &enumInfo();
 
 	/**
 	 * Applies an Assignment to a AtomicState.
@@ -85,7 +75,8 @@ struct Property {
 	 * @param assignment
 	 * @param state
 	 */
-	virtual void writeToState(const Assignment assignment, std::unique_ptr<drm_core::AtomicState> &state);
+	virtual void
+	writeToState(const Assignment assignment, std::unique_ptr<drm_core::AtomicState> &state);
 	virtual uint32_t intFromState(std::shared_ptr<ModeObject> obj);
 	virtual std::shared_ptr<ModeObject> modeObjFromState(std::shared_ptr<ModeObject> obj);
 
@@ -136,13 +127,14 @@ struct AtomicState {
 	 * i.e. has already been modified/touched, it is simply returned.
 	 *
 	 * @param id The ModeObject id of the Connector.
-	 * @return std::shared_ptr<drm_core::ConnectorState> ConnectorState for the @p id in the AtomicState
+	 * @return std::shared_ptr<drm_core::ConnectorState> ConnectorState for the @p id in the
+	 * AtomicState
 	 */
 	std::shared_ptr<ConnectorState> connector(uint32_t id);
 
-	std::unordered_map<uint32_t, std::shared_ptr<CrtcState>>& crtc_states(void);
-	std::unordered_map<uint32_t, std::shared_ptr<PlaneState>>& plane_states(void);
-	std::unordered_map<uint32_t, std::shared_ptr<ConnectorState>>& connector_states(void);
+	std::unordered_map<uint32_t, std::shared_ptr<CrtcState>> &crtc_states(void);
+	std::unordered_map<uint32_t, std::shared_ptr<PlaneState>> &plane_states(void);
+	std::unordered_map<uint32_t, std::shared_ptr<ConnectorState>> &connector_states(void);
 
 private:
 	Device *_device;
@@ -159,11 +151,14 @@ struct Assignment {
 	 * @param obj ModeObject that this Assignment belongs to.
 	 * @param property DRM Property that this Assignment assigns.
 	 * @param val Integer value to be set for the @p property of @p obj.
-	 * @return drm_core::Assignment Assignment instance to be used for committing the Configuration.
+	 * @return drm_core::Assignment Assignment instance to be used for committing the
+	 * Configuration.
 	 */
 	static Assignment withInt(std::shared_ptr<ModeObject>, Property *property, uint64_t val);
-	static Assignment withModeObj(std::shared_ptr<ModeObject>, Property *property, std::shared_ptr<ModeObject>);
-	static Assignment withBlob(std::shared_ptr<ModeObject>, Property *property, std::shared_ptr<Blob>);
+	static Assignment
+	withModeObj(std::shared_ptr<ModeObject>, Property *property, std::shared_ptr<ModeObject>);
+	static Assignment
+	withBlob(std::shared_ptr<ModeObject>, Property *property, std::shared_ptr<Blob>);
 
 	std::shared_ptr<ModeObject> object;
 	Property *property;
@@ -172,4 +167,4 @@ struct Assignment {
 	std::shared_ptr<Blob> blobValue;
 };
 
-} //namespace drm_core
+}  // namespace drm_core

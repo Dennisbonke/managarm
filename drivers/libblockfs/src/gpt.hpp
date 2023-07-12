@@ -1,22 +1,18 @@
 
+#include <blockfs.hpp>
 #include <string.h>
 #include <vector>
-
-#include <blockfs.hpp>
 
 namespace blockfs {
 namespace gpt {
 
 struct Guid {
-	bool operator== (const Guid &other) {
-		return a == other.a && b == other.b && c == other.c
-				&& !memcmp(d, other.d, 2)
-				&& !memcmp(e, other.e, 6);
+	bool operator==(const Guid &other) {
+		return a == other.a && b == other.b && c == other.c && !memcmp(d, other.d, 2)
+		    && !memcmp(e, other.e, 6);
 	}
 
-	bool operator!= (const Guid &other) {
-		return !(*this == other);
-	}
+	bool operator!=(const Guid &other) { return !(*this == other); }
 
 	uint32_t a;
 	uint16_t b;
@@ -24,15 +20,24 @@ struct Guid {
 	uint8_t d[2];
 	uint8_t e[6];
 };
+
 static_assert(sizeof(Guid) == 16, "Bad sizeof(Guid)");
 
 namespace type_guids {
-	static constexpr Guid null{0, 0, 0, {0, 0}, {0, 0, 0, 0, 0, 0}};
-	static constexpr Guid windowsData{0xEBD0A0A2, 0xB9E5, 0x4433, {0x87, 0xC0},
-			{0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7}};
-	static constexpr Guid managarmRootPartition{0x64212B3B, 0x56A1, 0x4DFB, {0x97, 0x1E},
-			{0xBC, 0x8C, 0xD0, 0x27, 0x99, 0x6A}};
-};
+constexpr static Guid null {0, 0, 0, {0, 0}, {0, 0, 0, 0, 0, 0}};
+constexpr static Guid windowsData {
+	0xEBD0A0A2,
+	0xB9E5,
+	0x4433,
+	{0x87, 0xC0},
+	{0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7}};
+constexpr static Guid managarmRootPartition {
+	0x64212B3B,
+	0x56A1,
+	0x4DFB,
+	{0x97, 0x1E},
+	{0xBC, 0x8C, 0xD0, 0x27, 0x99, 0x6A}};
+};  // namespace type_guids
 
 // --------------------------------------------------------
 // On-disk structures
@@ -55,6 +60,7 @@ struct DiskHeader {
 	uint32_t tableCheckSum;
 	uint8_t padding[420];
 };
+
 static_assert(sizeof(DiskHeader) == 512, "Bad GPT header struct size");
 
 struct DiskEntry {
@@ -65,6 +71,7 @@ struct DiskEntry {
 	uint64_t attrFlags;
 	uint8_t partitionName[72];
 };
+
 static_assert(sizeof(DiskEntry) == 128, "Bad GPT entry struct size");
 
 // --------------------------------------------------------
@@ -95,14 +102,12 @@ private:
 // --------------------------------------------------------
 
 struct Partition : public BlockDevice {
-	Partition(Table &table, Guid id, Guid type,
-			uint64_t start_lba, uint64_t num_sectors);
+	Partition(Table &table, Guid id, Guid type, uint64_t start_lba, uint64_t num_sectors);
 
-	async::result<void> readSectors(uint64_t sector, void *buffer,
-			size_t num_sectors) override;
+	async::result<void> readSectors(uint64_t sector, void *buffer, size_t num_sectors) override;
 
-	async::result<void> writeSectors(uint64_t sector, const void *buffer,
-			size_t num_sectors) override;
+	async::result<void>
+	writeSectors(uint64_t sector, const void *buffer, size_t num_sectors) override;
 
 	async::result<size_t> getSize() override;
 
@@ -118,5 +123,5 @@ private:
 	uint64_t _numSectors;
 };
 
-} } // namespace blockfs::gpt
-
+}  // namespace gpt
+}  // namespace blockfs

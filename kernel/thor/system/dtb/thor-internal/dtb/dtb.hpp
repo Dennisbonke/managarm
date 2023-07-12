@@ -1,13 +1,13 @@
 #pragma once
 
-#include <thor-internal/kernel_heap.hpp>
+#include <cstddef>
+#include <frg/array.hpp>
+#include <frg/hash_map.hpp>
+#include <frg/span.hpp>
+#include <frg/vector.hpp>
 #include <initgraph.hpp>
 #include <thor-internal/irq.hpp>
-#include <frg/hash_map.hpp>
-#include <frg/vector.hpp>
-#include <frg/array.hpp>
-#include <frg/span.hpp>
-#include <cstddef>
+#include <thor-internal/kernel_heap.hpp>
 
 // forward decl of types from kernel/common/dtb.hpp
 struct DeviceTreeNode;
@@ -17,14 +17,33 @@ namespace thor {
 
 struct DeviceTreeNode {
 	DeviceTreeNode(DeviceTreeNode *parent)
-	: parent_{parent}, children_{{}, *kernelAlloc}, name_{}, path_{*kernelAlloc},
-	model_{}, phandle_{}, compatible_{*kernelAlloc}, addressCells_{2}, hasAddressCells_{false},
-	sizeCells_{1}, hasSizeCells_{false}, interruptCells_{}, hasInterruptCells_{false},
-	reg_{*kernelAlloc}, ranges_{*kernelAlloc}, irqData_{nullptr, 0},
-	irqs_{*kernelAlloc}, interruptMap_{*kernelAlloc}, interruptMapMask_{*kernelAlloc},
-	interruptMapRaw_{nullptr, 0}, interruptController_{false},
-	interruptParentId_{0}, interruptParent_{}, busRange_{0, 0xFF},
-	enableMethod_{EnableMethod::unknown}, cpuReleaseAddr_{0}, method_{} { }
+	: parent_ {parent}
+	, children_ {{}, *kernelAlloc}
+	, name_ {}
+	, path_ {*kernelAlloc}
+	, model_ {}
+	, phandle_ {}
+	, compatible_ {*kernelAlloc}
+	, addressCells_ {2}
+	, hasAddressCells_ {false}
+	, sizeCells_ {1}
+	, hasSizeCells_ {false}
+	, interruptCells_ {}
+	, hasInterruptCells_ {false}
+	, reg_ {*kernelAlloc}
+	, ranges_ {*kernelAlloc}
+	, irqData_ {nullptr, 0}
+	, irqs_ {*kernelAlloc}
+	, interruptMap_ {*kernelAlloc}
+	, interruptMapMask_ {*kernelAlloc}
+	, interruptMapRaw_ {nullptr, 0}
+	, interruptController_ {false}
+	, interruptParentId_ {0}
+	, interruptParent_ {}
+	, busRange_ {0, 0xFF}
+	, enableMethod_ {EnableMethod::unknown}
+	, cpuReleaseAddr_ {0}
+	, method_ {} {}
 
 	void initializeWith(::DeviceTreeNode dtNode);
 	void finalizeInit();
@@ -33,27 +52,19 @@ struct DeviceTreeNode {
 		children_.insert(name, node);
 	}
 
-	DeviceTreeNode *parent() const {
-		return parent_;
-	}
+	DeviceTreeNode *parent() const { return parent_; }
 
-	DeviceTreeNode *interruptParent() const {
-		return interruptParent_;
-	}
+	DeviceTreeNode *interruptParent() const { return interruptParent_; }
 
-	frg::string_view name() const {
-		return name_;
-	}
+	frg::string_view name() const { return name_; }
 
-	frg::string_view model() const {
-		return model_;
-	}
+	frg::string_view model() const { return model_; }
 
-	template <size_t N>
+	template<size_t N>
 	bool isCompatible(frg::array<frg::string_view, N> with) const {
-		for (const auto &c : compatible_) {
-			for (const auto &w : with) {
-				if (c == w) {
+		for(const auto &c : compatible_) {
+			for(const auto &w : with) {
+				if(c == w) {
 					return true;
 				}
 			}
@@ -62,9 +73,7 @@ struct DeviceTreeNode {
 		return false;
 	}
 
-	bool isInterruptController() const {
-		return interruptController_;
-	}
+	bool isInterruptController() const { return interruptController_; }
 
 	struct RegRange {
 		uint32_t addrHi;
@@ -116,63 +125,41 @@ struct DeviceTreeNode {
 		psci
 	};
 
-	frg::string_view path() const {
-		return path_;
-	}
+	frg::string_view path() const { return path_; }
 
 	uint64_t translateAddress(uint64_t addr) const;
 
-	const auto &reg() const {
-		return reg_;
-	}
+	const auto &reg() const { return reg_; }
 
-	const auto &ranges() const {
-		return ranges_;
-	}
+	const auto &ranges() const { return ranges_; }
 
-	const auto &children() const {
-		return children_;
-	}
+	const auto &children() const { return children_; }
 
-	const auto &irqs() const {
-		return irqs_;
-	}
+	const auto &irqs() const { return irqs_; }
 
-	const auto &busRange() const {
-		return busRange_;
-	}
+	const auto &busRange() const { return busRange_; }
 
-	const auto &interruptMap() const {
-		return interruptMap_;
-	}
+	const auto &interruptMap() const { return interruptMap_; }
 
-	const auto &interruptMapMask() const {
-		return interruptMapMask_;
-	}
+	const auto &interruptMapMask() const { return interruptMapMask_; }
 
-	const auto &enableMethod() const {
-		return enableMethod_;
-	}
+	const auto &enableMethod() const { return enableMethod_; }
 
-	const auto &method() const {
-		return method_;
-	}
+	const auto &method() const { return method_; }
 
-	const auto &cpuOn() const {
-		return cpuOn_;
-	}
+	const auto &cpuOn() const { return cpuOn_; }
 
-	const auto &cpuReleaseAddr() const {
-		return cpuReleaseAddr_;
-	}
+	const auto &cpuReleaseAddr() const { return cpuReleaseAddr_; }
 
-	template <typename F>
+	template<typename F>
 	bool forEach(F &&func) {
-		for (auto [_, child] : children_) {
-			if (func(child))
+		for(auto [_, child] : children_) {
+			if(func(child)) {
 				return true;
-			if (child->forEach(std::forward<F>(func)))
+			}
+			if(child->forEach(std::forward<F>(func))) {
 				return true;
+			}
 		}
 
 		return false;
@@ -185,12 +172,8 @@ private:
 
 	DeviceTreeNode *parent_;
 
-	frg::hash_map<
-		frg::string_view,
-		DeviceTreeNode *,
-		frg::hash<frg::string_view>,
-		KernelAlloc
-	> children_;
+	frg::hash_map<frg::string_view, DeviceTreeNode *, frg::hash<frg::string_view>, KernelAlloc>
+		children_;
 
 	frg::string_view name_;
 	frg::string<KernelAlloc> path_;
@@ -233,7 +216,7 @@ DeviceTreeNode *getDeviceTreeRoot();
 
 initgraph::Stage *getDeviceTreeParsedStage();
 
-static inline frg::array<frg::string_view, 12> dtGicCompatible = {
+inline static frg::array<frg::string_view, 12> dtGicCompatible = {
 	"arm,arm11mp-gic",
 	"arm,cortex-a15-gic",
 	"arm,cortex-a7-gic",
@@ -245,13 +228,11 @@ static inline frg::array<frg::string_view, 12> dtGicCompatible = {
 	"arm,tc11mp-gic",
 	"nvidia,tegra210-agic",
 	"qcom,msm-8660-qgic",
-	"qcom,msm-qgic2"
-};
+	"qcom,msm-qgic2"};
 
-static inline frg::array<frg::string_view, 3> dtPciCompatible = {
+inline static frg::array<frg::string_view, 3> dtPciCompatible = {
 	"pci-host-cam-generic",
 	"pci-host-ecam-generic",
-	"brcm,bcm2711-pcie"
-};
+	"brcm,bcm2711-pcie"};
 
-} // namespace thor
+}  // namespace thor

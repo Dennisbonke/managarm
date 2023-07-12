@@ -1,12 +1,11 @@
 #pragma once
 
-#include <core/id-allocator.hpp>
-
-#include "fwd-decls.hpp"
-
 #include "device.hpp"
-#include "range-allocator.hpp"
+#include "fwd-decls.hpp"
 #include "property.hpp"
+#include "range-allocator.hpp"
+
+#include <core/id-allocator.hpp>
 
 namespace drm_core {
 
@@ -19,8 +18,7 @@ enum struct ObjectType {
 };
 
 struct BufferObject {
-	BufferObject()
-	: _mapping(-1) { }
+	BufferObject() : _mapping(-1) {}
 
 protected:
 	~BufferObject() = default;
@@ -38,8 +36,7 @@ private:
 };
 
 struct Blob {
-	Blob(std::vector<char> data, uint32_t id)
-	: _data(std::move(data)), _id(id) {  };
+	Blob(std::vector<char> data, uint32_t id) : _data(std::move(data)), _id(id) {};
 
 	uint32_t id();
 	size_t size();
@@ -55,8 +52,7 @@ private:
  * It can represent Connectors, CRTCs, Encoders, Framebuffers and Planes.
  */
 struct ModeObject {
-	ModeObject(ObjectType type, uint32_t id)
-	: _type(type), _id(id) { };
+	ModeObject(ObjectType type, uint32_t id) : _type(type), _id(id) {};
 
 	virtual ~ModeObject() = default;
 
@@ -79,6 +75,7 @@ struct ModeObject {
 	 * @return std::vector<drm_core::Assignment>
 	 */
 	virtual std::vector<drm_core::Assignment> getAssignments(std::shared_ptr<Device> dev);
+
 private:
 	ObjectType _type;
 	uint32_t _id;
@@ -153,7 +150,10 @@ private:
 };
 
 struct ConnectorState {
-	ConnectorState(std::weak_ptr<Connector> connector) : connector{connector}, crtc{}, encoder{} {};
+	ConnectorState(std::weak_ptr<Connector> connector)
+	: connector {connector}
+	, crtc {}
+	, encoder {} {};
 
 	std::shared_ptr<Connector> connector;
 	std::shared_ptr<Crtc> crtc;
@@ -163,7 +163,8 @@ struct ConnectorState {
 
 /**
  * Represents a display connector.
- * It transmits the signal to the display, detects display connection and removal and exposes the display's supported modes.
+ * It transmits the signal to the display, detects display connection and removal and exposes the
+ * display's supported modes.
  */
 struct Connector : ModeObject {
 	Connector(uint32_t id);
@@ -253,7 +254,7 @@ private:
 };
 
 struct PlaneState {
-	PlaneState(std::weak_ptr<Plane> plane) : plane{plane}, crtc{}, fb{} { };
+	PlaneState(std::weak_ptr<Plane> plane) : plane {plane}, crtc {}, fb {} {};
 
 	Plane::PlaneType type(void);
 
@@ -270,4 +271,4 @@ struct PlaneState {
 	uint32_t src_h = 0;
 };
 
-} //namespace drm_core
+}  // namespace drm_core

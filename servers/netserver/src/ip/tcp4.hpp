@@ -1,8 +1,8 @@
 #pragma once
 
 #include <helix/ipc.hpp>
-#include <smarter.hpp>
 #include <map>
+#include <smarter.hpp>
 
 class Ip4Packet;
 

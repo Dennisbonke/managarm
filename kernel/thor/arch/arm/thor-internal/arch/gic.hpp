@@ -1,9 +1,9 @@
 #pragma once
 
+#include <arch/mem_space.hpp>
 #include <initgraph.hpp>
 #include <thor-internal/arch/cpu.hpp>
 #include <thor-internal/irq.hpp>
-#include <arch/mem_space.hpp>
 
 namespace thor {
 
@@ -28,7 +28,9 @@ struct GicDistributor {
 		friend struct GicDistributor;
 
 		Pin(GicDistributor *parent, uint32_t irq)
-		: IrqPin{parent->buildPinName(irq)}, parent_{parent}, irq_{irq} {}
+		: IrqPin {parent->buildPinName(irq)}
+		, parent_ {parent}
+		, irq_ {irq} {}
 
 		IrqStrategy program(TriggerMode mode, Polarity polarity) override;
 		void mask() override;
@@ -49,9 +51,11 @@ struct GicDistributor {
 	};
 
 	Pin *setupIrq(uint32_t irq, TriggerMode mode);
+
 	Pin *getPin(uint32_t irq) {
-		if (irq >= irqPins_.size())
+		if(irq >= irqPins_.size()) {
 			return nullptr;
+		}
 
 		return irqPins_[irq];
 	}
@@ -75,13 +79,9 @@ struct GicCpuInterface {
 
 	uint8_t getCurrentPriority();
 
-	GicDistributor *getDistributor() const {
-		return dist_;
-	}
+	GicDistributor *getDistributor() const { return dist_; }
 
-	uint8_t interfaceNumber() const {
-		return ifaceNo_;
-	}
+	uint8_t interfaceNumber() const { return ifaceNo_; }
 
 private:
 	GicDistributor *dist_;
@@ -95,4 +95,4 @@ initgraph::Stage *getIrqControllerReadyStage();
 
 void initGicOnThisCpu();
 
-}
+}  // namespace thor

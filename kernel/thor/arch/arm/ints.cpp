@@ -1,16 +1,16 @@
+#include <assert.h>
 #include <thor-internal/arch/cpu.hpp>
-#include <thor-internal/arch/ints.hpp>
 #include <thor-internal/arch/gic.hpp>
+#include <thor-internal/arch/ints.hpp>
 #include <thor-internal/debug.hpp>
 #include <thor-internal/thread.hpp>
-#include <assert.h>
 
 namespace thor {
 
 extern "C" void *thorExcVectors;
 
 void initializeIrqVectors() {
-	asm volatile ("msr vbar_el1, %0" :: "r"(&thorExcVectors));
+	asm volatile("msr vbar_el1, %0" ::"r"(&thorExcVectors));
 }
 
 extern "C" void enableIntsAndHaltForever();
@@ -36,47 +36,53 @@ extern "C" void onPlatformInvalidException(FaultImageAccessor image) {
 }
 
 namespace {
-	Word mmuAbortError(uint64_t esr) {
-		Word errorCode = 0;
+Word mmuAbortError(uint64_t esr) {
+	Word errorCode = 0;
 
-		auto ec = esr >> 26;
-		auto iss = esr & ((1 << 25) - 1);
+	auto ec = esr >> 26;
+	auto iss = esr & ((1 << 25) - 1);
 
-		// Originated from EL0
-		if (ec == 0x20 || ec == 0x24)
-			errorCode |= kPfUser;
-
-		// Is an instruction abort
-		if (ec == 0x20 || ec == 0x21) {
-			errorCode |= kPfInstruction;
-		} else {
-			if (iss & (1 << 6))
-				errorCode |= kPfWrite;
-		}
-
-		auto sc = iss & 0x3F;
-
-		if (sc < 16) {
-			auto type = (sc >> 2) & 0b11;
-			if (type == 0) // Address size fault
-				errorCode |= kPfBadTable;
-			if (type != 1) // Not a translation fault
-				errorCode |= kPfAccess;
-		}
-
-		return errorCode;
+	// Originated from EL0
+	if(ec == 0x20 || ec == 0x24) {
+		errorCode |= kPfUser;
 	}
 
-	bool updatePageAccess(FaultImageAccessor image, Word error) {
-		if ((error & kPfWrite) && (error & kPfAccess) && !inHigherHalf(*image.faultAddr())) {
-			// Check if it's just a writable page that's not dirty yet
-			smarter::borrowed_ptr<Thread> this_thread = getCurrentThread();
-			return this_thread->getAddressSpace()->updatePageAccess(*image.faultAddr() & ~(kPageSize - 1));
+	// Is an instruction abort
+	if(ec == 0x20 || ec == 0x21) {
+		errorCode |= kPfInstruction;
+	} else {
+		if(iss & (1 << 6)) {
+			errorCode |= kPfWrite;
 		}
-
-		return false;
 	}
-} // namespace anonymous
+
+	auto sc = iss & 0x3F;
+
+	if(sc < 16) {
+		auto type = (sc >> 2) & 0b11;
+		if(type == 0) {  // Address size fault
+			errorCode |= kPfBadTable;
+		}
+		if(type != 1) {  // Not a translation fault
+			errorCode |= kPfAccess;
+		}
+	}
+
+	return errorCode;
+}
+
+bool updatePageAccess(FaultImageAccessor image, Word error) {
+	if((error & kPfWrite) && (error & kPfAccess) && !inHigherHalf(*image.faultAddr())) {
+		// Check if it's just a writable page that's not dirty yet
+		smarter::borrowed_ptr<Thread> this_thread = getCurrentThread();
+		return this_thread->getAddressSpace()->updatePageAccess(
+			*image.faultAddr() & ~(kPageSize - 1)
+		);
+	}
+
+	return false;
+}
+}  // namespace
 
 void handlePageFault(FaultImageAccessor image, uintptr_t address, Word errorCode);
 void handleOtherFault(FaultImageAccessor image, Interrupt fault);
@@ -89,50 +95,51 @@ extern "C" void onPlatformSyncFault(FaultImageAccessor image) {
 
 	enableInts();
 
-	switch (ec) {
-		case 0x00: // Invalid
-		case 0x18: // Trapped MSR, MRS, or System instruction
-			handleOtherFault(image, kIntrIllegalInstruction);
-			break;
-		case 0x20: // Instruction abort, lower EL
-		case 0x21: // Instruction abort, same EL
-		case 0x24: // Data abort, lower EL
-		case 0x25: { // Data abort, same EL
-			auto error = mmuAbortError(*image.code());
-			if (updatePageAccess(image, error)) {
-				if constexpr (logUpdatePageAccess) {
-					infoLogger() << "thor: updated page "
-						<< (void *)(*image.faultAddr() & ~(kPageSize - 1))
-						<< " status on access from " << (void *)*image.ip() << frg::endlog;
-				}
-
-				break;
+	switch(ec) {
+	case 0x00:  // Invalid
+	case 0x18:  // Trapped MSR, MRS, or System instruction
+		handleOtherFault(image, kIntrIllegalInstruction);
+		break;
+	case 0x20:  // Instruction abort, lower EL
+	case 0x21:  // Instruction abort, same EL
+	case 0x24:  // Data abort, lower EL
+	case 0x25: {  // Data abort, same EL
+		auto error = mmuAbortError(*image.code());
+		if(updatePageAccess(image, error)) {
+			if constexpr(logUpdatePageAccess) {
+				infoLogger() << "thor: updated page "
+					     << (void *) (*image.faultAddr() & ~(kPageSize - 1))
+					     << " status on access from " << (void *) *image.ip()
+					     << frg::endlog;
 			}
 
-			handlePageFault(image, *image.faultAddr(), error);
 			break;
 		}
-		case 0x15: // Trapped SVC in AArch64
-			handleSyscall(image);
-			break;
-		case 0x30: // Breakpoint, lower EL
-		case 0x31: // Breakpoint, same EL
-			handleOtherFault(image, kIntrBreakpoint);
-			break;
-		case 0x0E: // Illegal Execution fault
-		case 0x22: // IP alignment fault
-		case 0x26: // SP alignment fault
-			handleOtherFault(image, kIntrGeneralFault);
-			break;
-		case 0x3C: // BRK instruction
-			handleOtherFault(image, kIntrBreakpoint);
-			break;
-		default:
-			panicLogger() << "Unexpected fault " << ec
-				<< " from ip: " << (void *)*image.ip() << "\n"
-				<< "sp: " << (void *)*image.sp() << " "
-				<< "syndrome: 0x" << frg::hex_fmt(*image.code()) << " "
-				<< "saved state: 0x" << frg::hex_fmt(*image.rflags()) << frg::endlog;
+
+		handlePageFault(image, *image.faultAddr(), error);
+		break;
+	}
+	case 0x15:  // Trapped SVC in AArch64
+		handleSyscall(image);
+		break;
+	case 0x30:  // Breakpoint, lower EL
+	case 0x31:  // Breakpoint, same EL
+		handleOtherFault(image, kIntrBreakpoint);
+		break;
+	case 0x0E:  // Illegal Execution fault
+	case 0x22:  // IP alignment fault
+	case 0x26:  // SP alignment fault
+		handleOtherFault(image, kIntrGeneralFault);
+		break;
+	case 0x3C:  // BRK instruction
+		handleOtherFault(image, kIntrBreakpoint);
+		break;
+	default:
+		panicLogger() << "Unexpected fault " << ec << " from ip: " << (void *) *image.ip()
+			      << "\n"
+			      << "sp: " << (void *) *image.sp() << " "
+			      << "syndrome: 0x" << frg::hex_fmt(*image.code()) << " "
+			      << "saved state: 0x" << frg::hex_fmt(*image.rflags()) << frg::endlog;
 	}
 
 	disableInts();
@@ -147,7 +154,7 @@ extern "C" void onPlatformAsyncFault(FaultImageAccessor image) {
 
 	bool recoverable = false;
 
-	if (ec == 0x2F) {
+	if(ec == 0x2F) {
 		bool ids = code & (1 << 24);
 		bool iesb = code & (1 << 13);
 		uint8_t aet = (code >> 10) & 7;
@@ -162,78 +169,88 @@ extern "C" void onPlatformAsyncFault(FaultImageAccessor image) {
 			"Reserved",
 			"Reserved",
 			"Corrected",
-			"Reserved"
-		};
+			"Reserved"};
 
-		if (ids) {
-			urgentLogger() << "thor: SError with implementation defined information: ESR = 0x"
-				<< frg::hex_fmt{code} << frg::endlog;
+		if(ids) {
+			urgentLogger()
+				<< "thor: SError with implementation defined information: ESR = 0x"
+				<< frg::hex_fmt {code} << frg::endlog;
 		} else {
 			auto log = urgentLogger();
 			log << "thor: ";
 
-			if (dfsc == 0x11)
+			if(dfsc == 0x11) {
 				log << aet_str[aet] << " ";
+			}
 
 			log << "SError ";
 
 			log << " (EA = " << (ea ? "true" : "false")
-				<< ", IESB = " << (iesb ? "true" : "false") << ")";
+			    << ", IESB = " << (iesb ? "true" : "false") << ")";
 
-			if (dfsc != 0x11)
+			if(dfsc != 0x11) {
 				log << " with DFSC = " << dfsc;
+			}
 
 			log << frg::endlog;
 
-			if (aet == 2 || aet == 12)
+			if(aet == 2 || aet == 12) {
 				recoverable = true;
+			}
 		}
 	} else {
 		urgentLogger() << "thor: unexpectec EC " << ec << " (ESR = 0x"
-			<< frg::hex_fmt{code} << ")" << frg::endlog;
+			       << frg::hex_fmt {code} << ")" << frg::endlog;
 	}
 
-	urgentLogger() << "thor: IP = 0x" << frg::hex_fmt{*image.ip()}
-			<< ", SP = 0x" << frg::hex_fmt{*image.sp()} << frg::endlog;
+	urgentLogger() << "thor: IP = 0x" << frg::hex_fmt {*image.ip()} << ", SP = 0x"
+		       << frg::hex_fmt {*image.sp()} << frg::endlog;
 
-	if (!recoverable)
+	if(!recoverable) {
 		panicLogger() << "thor: Panic due to unrecoverable error" << frg::endlog;
+	}
 }
 
 void handleIrq(IrqImageAccessor image, int number);
 void handlePreemption(IrqImageAccessor image);
 
-static constexpr bool logSGIs = false;
-static constexpr bool logSpurious = false;
+constexpr static bool logSGIs = false;
+constexpr static bool logSpurious = false;
 
 extern "C" void onPlatformIrq(IrqImageAccessor image) {
 	auto &cpuInterface = getCpuData()->gicCpuInterface;
 
 	auto [cpu, irq] = cpuInterface->get();
 
-	asm volatile ("isb" ::: "memory");
+	asm volatile("isb" ::: "memory");
 
-	if (irq < 16) {
-		if constexpr (logSGIs)
-			infoLogger() << "thor: onPlatformIrq: on CPU " << getCpuData()->cpuIndex << ", got a SGI (no. " << irq << ") that originated from CPU " << cpu << frg::endlog;
+	if(irq < 16) {
+		if constexpr(logSGIs) {
+			infoLogger() << "thor: onPlatformIrq: on CPU " << getCpuData()->cpuIndex
+				     << ", got a SGI (no. " << irq << ") that originated from CPU "
+				     << cpu << frg::endlog;
+		}
 
 		cpuInterface->eoi(cpu, irq);
 
-		if (irq == 0) {
+		if(irq == 0) {
 			handlePreemption(image);
 		} else {
 			assert(irq == 1);
 			assert(!irqMutex().nesting());
 			disableUserAccess();
 
-			for(int i = 0; i < maxAsid; i++)
+			for(int i = 0; i < maxAsid; i++) {
 				getCpuData()->asidBindings[i].shootdown();
+			}
 
 			getCpuData()->globalBinding.shootdown();
 		}
-	} else if (irq >= 1020) {
-		if constexpr (logSpurious)
-			infoLogger() << "thor: on CPU " << getCpuData()->cpuIndex << ", spurious IRQ " << irq << " occured" << frg::endlog;
+	} else if(irq >= 1020) {
+		if constexpr(logSpurious) {
+			infoLogger() << "thor: on CPU " << getCpuData()->cpuIndex
+				     << ", spurious IRQ " << irq << " occured" << frg::endlog;
+		}
 		// no need to EOI spurious irqs
 	} else {
 		handleIrq(image, irq);
@@ -250,4 +267,4 @@ extern "C" void onPlatformWork() {
 	disableInts();
 }
 
-} // namespace thor
+}  // namespace thor

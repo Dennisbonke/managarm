@@ -1,9 +1,8 @@
 #pragma once
 
-#include <atomic>
-
-#include <frg/list.hpp>
 #include <assert.h>
+#include <atomic>
+#include <frg/list.hpp>
 #include <smarter.hpp>
 #include <thor-internal/mm-rc.hpp>
 #include <thor-internal/types.hpp>
@@ -28,8 +27,7 @@ struct PageAccessor {
 		swap(a._pointer, b._pointer);
 	}
 
-	PageAccessor()
-	: _pointer{nullptr} { }
+	PageAccessor() : _pointer {nullptr} {}
 
 	PageAccessor(PhysicalAddr physical) {
 		assert(physical != PhysicalAddr(-1) && "trying to access invalid physical page");
@@ -40,25 +38,18 @@ struct PageAccessor {
 
 	PageAccessor(const PageAccessor &) = delete;
 
-	PageAccessor(PageAccessor &&other)
-	: PageAccessor{} {
-		swap(*this, other);
-	}
+	PageAccessor(PageAccessor &&other) : PageAccessor {} { swap(*this, other); }
 
-	~PageAccessor() { }
+	~PageAccessor() {}
 
-	PageAccessor &operator= (PageAccessor other) {
+	PageAccessor &operator=(PageAccessor other) {
 		swap(*this, other);
 		return *this;
 	}
 
-	explicit operator bool () {
-		return _pointer;
-	}
+	explicit operator bool() { return _pointer; }
 
-	void *get() {
-		return _pointer;
-	}
+	void *get() { return _pointer; }
 
 private:
 	void *_pointer;
@@ -109,7 +100,7 @@ void poisonPhysicalWriteAccess(PhysicalAddr physical);
 struct PageSpace;
 struct PageBinding;
 
-static constexpr int maxPcidCount = 8;
+constexpr static int maxPcidCount = 8;
 
 // Per-CPU context for paging.
 struct PageContext {
@@ -119,7 +110,7 @@ struct PageContext {
 
 	PageContext(const PageContext &) = delete;
 
-	PageContext &operator= (const PageContext &) = delete;
+	PageContext &operator=(const PageContext &) = delete;
 
 private:
 	// Timestamp for the LRU mechansim of PCIDs.
@@ -134,24 +125,18 @@ struct PageBinding {
 
 	PageBinding(const PageBinding &) = delete;
 
-	PageBinding &operator= (const PageBinding &) = delete;
+	PageBinding &operator=(const PageBinding &) = delete;
 
-	smarter::shared_ptr<PageSpace> boundSpace() {
-		return _boundSpace;
-	}
+	smarter::shared_ptr<PageSpace> boundSpace() { return _boundSpace; }
 
 	void setupPcid(int pcid) {
 		assert(!_pcid);
 		_pcid = pcid;
 	}
 
-	int getPcid() {
-		return _pcid;
-	}
+	int getPcid() { return _pcid; }
 
-	uint64_t primaryStamp() {
-		return _primaryStamp;
-	}
+	uint64_t primaryStamp() { return _primaryStamp; }
 
 	bool isPrimary();
 
@@ -181,7 +166,7 @@ struct GlobalPageBinding {
 
 	GlobalPageBinding(const GlobalPageBinding &) = delete;
 
-	GlobalPageBinding &operator= (const GlobalPageBinding &) = delete;
+	GlobalPageBinding &operator=(const GlobalPageBinding &) = delete;
 
 	void bind();
 
@@ -200,9 +185,7 @@ struct PageSpace {
 
 	~PageSpace();
 
-	PhysicalAddr rootTable() {
-		return _rootTable;
-	}
+	PhysicalAddr rootTable() { return _rootTable; }
 
 	void retire(RetireNode *node);
 
@@ -213,7 +196,7 @@ private:
 
 	std::atomic<bool> _wantToRetire = false;
 
-	RetireNode * _retireNode = nullptr;
+	RetireNode *_retireNode = nullptr;
 
 	frg::ticket_spinlock _mutex;
 
@@ -226,14 +209,13 @@ private:
 		frg::locate_member<
 			ShootNode,
 			frg::default_list_hook<ShootNode>,
-			&ShootNode::_queueNode
-		>
-	> _shootQueue;
+			&ShootNode::_queueNode>>
+		_shootQueue;
 };
 
 namespace page_mode {
-	static constexpr uint32_t remap = 1;
-}
+constexpr static uint32_t remap = 1;
+}  // namespace page_mode
 
 enum class PageMode {
 	null,
@@ -244,17 +226,17 @@ enum class PageMode {
 using PageFlags = uint32_t;
 
 namespace page_access {
-	static constexpr uint32_t write = 1;
-	static constexpr uint32_t execute = 2;
-	static constexpr uint32_t read = 4;
-}
+constexpr static uint32_t write = 1;
+constexpr static uint32_t execute = 2;
+constexpr static uint32_t read = 4;
+}  // namespace page_access
 
 using PageStatus = uint32_t;
 
 namespace page_status {
-	static constexpr PageStatus present = 1;
-	static constexpr PageStatus dirty = 2;
-};
+constexpr static PageStatus present = 1;
+constexpr static PageStatus dirty = 2;
+};  // namespace page_status
 
 enum class CachingMode {
 	null,
@@ -268,6 +250,7 @@ enum class CachingMode {
 
 struct KernelPageSpace {
 	friend struct GlobalPageBinding;
+
 public:
 	static void initialize();
 
@@ -278,16 +261,18 @@ public:
 
 	KernelPageSpace(const KernelPageSpace &) = delete;
 
-	KernelPageSpace &operator= (const KernelPageSpace &) = delete;
+	KernelPageSpace &operator=(const KernelPageSpace &) = delete;
 
-	PhysicalAddr rootTable() {
-		return _rootTable;
-	}
+	PhysicalAddr rootTable() { return _rootTable; }
 
 	bool submitShootdown(ShootNode *node);
 
-	void mapSingle4k(VirtualAddr pointer, PhysicalAddr physical,
-			uint32_t flags, CachingMode caching_mode);
+	void mapSingle4k(
+		VirtualAddr pointer,
+		PhysicalAddr physical,
+		uint32_t flags,
+		CachingMode caching_mode
+	);
 	PhysicalAddr unmapSingle4k(VirtualAddr pointer);
 
 private:
@@ -306,9 +291,8 @@ private:
 		frg::locate_member<
 			ShootNode,
 			frg::default_list_hook<ShootNode>,
-			&ShootNode::_queueNode
-		>
-	> _shootQueue;
+			&ShootNode::_queueNode>>
+		_shootQueue;
 };
 
 constexpr uint64_t ptePresent = 0x1;
@@ -331,7 +315,7 @@ public:
 
 		~Walk();
 
-		Walk &operator= (const Walk &) = delete;
+		Walk &operator=(const Walk &) = delete;
 
 		void walkTo(uintptr_t address);
 
@@ -346,41 +330,36 @@ public:
 		uintptr_t _address = 0;
 
 		// Accessors for all levels of PTs.
-		PageAccessor _accessor4; // Coarsest level (PML4).
+		PageAccessor _accessor4;  // Coarsest level (PML4).
 		PageAccessor _accessor3;
 		PageAccessor _accessor2;
-		PageAccessor _accessor1; // Finest level (page table).
+		PageAccessor _accessor1;  // Finest level (page table).
 	};
 
 	struct Cursor {
-		Cursor(ClientPageSpace *space, uintptr_t va)
-		: space_{space}, va_{0} {
-			_accessor4 = PageAccessor{space->rootTable()};
+		Cursor(ClientPageSpace *space, uintptr_t va) : space_ {space}, va_ {0} {
+			_accessor4 = PageAccessor {space->rootTable()};
 			moveTo(va);
 		}
 
-		uintptr_t virtualAddress() {
-			return va_;
-		}
+		uintptr_t virtualAddress() { return va_; }
 
 		void moveTo(uintptr_t va) {
-			if((va_ ^ va) & (uintptr_t{0x1FF} << 39)) {
+			if((va_ ^ va) & (uintptr_t {0x1FF} << 39)) {
 				_accessor3 = {};
 				_accessor2 = {};
 				_accessor1 = {};
-			}else if((va_ ^ va) & (uintptr_t{0x1FF} << 30)) {
+			} else if((va_ ^ va) & (uintptr_t {0x1FF} << 30)) {
 				_accessor2 = {};
 				_accessor1 = {};
-			}else if((va_ ^ va) & (uintptr_t{0x1FF} << 21)) {
+			} else if((va_ ^ va) & (uintptr_t {0x1FF} << 21)) {
 				_accessor1 = {};
 			}
 			va_ = va;
 			accessPts();
 		}
 
-		void advance4k() {
-			moveTo(va_ + kPageSize);
-		}
+		void advance4k() { moveTo(va_ + kPageSize); }
 
 		bool findPresent(uintptr_t limit) {
 			while(va_ < limit) {
@@ -389,10 +368,11 @@ public:
 					continue;
 				}
 				auto ptPtr = reinterpret_cast<uint64_t *>(_accessor1.get())
-						+ ((va_ >> 12) & 0x1FF);
+					   + ((va_ >> 12) & 0x1FF);
 				auto ptEnt = __atomic_load_n(ptPtr, __ATOMIC_RELAXED);
-				if(ptEnt & ptePresent)
+				if(ptEnt & ptePresent) {
 					return true;
+				}
 				advance4k();
 			}
 			return false;
@@ -405,131 +385,163 @@ public:
 					continue;
 				}
 				auto ptPtr = reinterpret_cast<uint64_t *>(_accessor1.get())
-						+ ((va_ >> 12) & 0x1FF);
+					   + ((va_ >> 12) & 0x1FF);
 				auto ptEnt = __atomic_load_n(ptPtr, __ATOMIC_RELAXED);
-				if((ptEnt & ptePresent) && (ptEnt & pteDirty))
+				if((ptEnt & ptePresent) && (ptEnt & pteDirty)) {
 					return true;
+				}
 				advance4k();
 			}
 			return false;
 		}
 
 		void map4k(PhysicalAddr pa, PageFlags flags, CachingMode cachingMode) {
-			if(!_accessor1)
+			if(!_accessor1) {
 				realizePts();
+			}
 
 			auto ptPtr = reinterpret_cast<uint64_t *>(_accessor1.get())
-					+ ((va_ >> 12) & 0x1FF);
+				   + ((va_ >> 12) & 0x1FF);
 			auto ptEnt = __atomic_load_n(ptPtr, __ATOMIC_RELAXED);
 			assert(!(ptEnt & ptePresent));
 
 			ptEnt = pa | ptePresent | pteUser;
-			if(flags & page_access::write)
+			if(flags & page_access::write) {
 				ptEnt |= pteWrite;
-			if(!(flags & page_access::execute))
+			}
+			if(!(flags & page_access::execute)) {
 				ptEnt |= pteXd;
+			}
 			if(cachingMode == CachingMode::writeThrough) {
 				ptEnt |= ptePwt;
-			}else if(cachingMode == CachingMode::writeCombine) {
+			} else if(cachingMode == CachingMode::writeCombine) {
 				ptEnt |= ptePat | ptePwt;
-			}else if(cachingMode == CachingMode::uncached) {
+			} else if(cachingMode == CachingMode::uncached) {
 				ptEnt |= ptePcd;
-			}else{
-				assert(cachingMode == CachingMode::null || cachingMode == CachingMode::writeBack);
+			} else {
+				assert(cachingMode == CachingMode::null
+				       || cachingMode == CachingMode::writeBack);
 			}
 			__atomic_store_n(ptPtr, ptEnt, __ATOMIC_RELAXED);
 		}
 
 		PageStatus remap4k(PhysicalAddr pa, PageFlags flags, CachingMode cachingMode) {
-			if(!_accessor1)
+			if(!_accessor1) {
 				realizePts();
+			}
 
 			auto ptPtr = reinterpret_cast<uint64_t *>(_accessor1.get())
-					+ ((va_ >> 12) & 0x1FF);
+				   + ((va_ >> 12) & 0x1FF);
 			auto ptEnt = pa | ptePresent | pteUser;
-			if(flags & page_access::write)
+			if(flags & page_access::write) {
 				ptEnt |= pteWrite;
-			if(!(flags & page_access::execute))
+			}
+			if(!(flags & page_access::execute)) {
 				ptEnt |= pteXd;
+			}
 			if(cachingMode == CachingMode::writeThrough) {
 				ptEnt |= ptePwt;
-			}else if(cachingMode == CachingMode::writeCombine) {
+			} else if(cachingMode == CachingMode::writeCombine) {
 				ptEnt |= ptePat | ptePwt;
-			}else if(cachingMode == CachingMode::uncached) {
+			} else if(cachingMode == CachingMode::uncached) {
 				ptEnt |= ptePcd;
-			}else{
-				assert(cachingMode == CachingMode::null || cachingMode == CachingMode::writeBack);
+			} else {
+				assert(cachingMode == CachingMode::null
+				       || cachingMode == CachingMode::writeBack);
 			}
 			ptEnt = __atomic_exchange_n(ptPtr, ptEnt, __ATOMIC_RELAXED);
-			if(!(ptEnt & ptePresent))
+			if(!(ptEnt & ptePresent)) {
 				return 0;
+			}
 			PageStatus status = page_status::present;
-			if(ptEnt & pteDirty)
+			if(ptEnt & pteDirty) {
 				status |= page_status::dirty;
+			}
 			return status;
 		}
 
 		PageStatus clean4k() {
-			if(!_accessor1)
+			if(!_accessor1) {
 				return 0;
+			}
 
 			auto ptPtr = reinterpret_cast<uint64_t *>(_accessor1.get())
-					+ ((va_ >> 12) & 0x1FF);
+				   + ((va_ >> 12) & 0x1FF);
 			auto ptEnt = __atomic_fetch_and(ptPtr, ~pteDirty, __ATOMIC_RELAXED);
-			if(!(ptEnt & ptePresent))
+			if(!(ptEnt & ptePresent)) {
 				return 0;
+			}
 			PageStatus status = page_status::present;
-			if(ptEnt & pteDirty)
+			if(ptEnt & pteDirty) {
 				status |= page_status::dirty;
+			}
 			return status;
 		}
 
 		PageStatus unmap4k() {
-			if(!_accessor1)
+			if(!_accessor1) {
 				return 0;
+			}
 
 			auto ptPtr = reinterpret_cast<uint64_t *>(_accessor1.get())
-					+ ((va_ >> 12) & 0x1FF);
+				   + ((va_ >> 12) & 0x1FF);
 			auto ptEnt = __atomic_exchange_n(ptPtr, 0, __ATOMIC_RELAXED);
-			if(!(ptEnt & ptePresent))
+			if(!(ptEnt & ptePresent)) {
 				return 0;
+			}
 			PageStatus status = page_status::present;
-			if(ptEnt & pteDirty)
+			if(ptEnt & pteDirty) {
 				status |= page_status::dirty;
+			}
 			return status;
 		}
 
 	private:
 		void accessPts() {
-			auto doReload = [&] <int S> (PageAccessor &subPt, PageAccessor &pt,
-					std::integral_constant<int, S>) -> bool {
+			auto doReload =
+				[&]<int S>(PageAccessor &subPt, PageAccessor &pt, std::integral_constant<int, S>)
+				-> bool {
 				auto ptPtr = reinterpret_cast<uint64_t *>(pt.get())
-						+ ((va_ >> S) & 0x1FF);
+					   + ((va_ >> S) & 0x1FF);
 				auto ptEnt = __atomic_load_n(ptPtr, __ATOMIC_ACQUIRE);
-				if(!(ptEnt & ptePresent))
+				if(!(ptEnt & ptePresent)) {
 					return false;
-				subPt = PageAccessor{ptEnt & pteAddress};
+				}
+				subPt = PageAccessor {ptEnt & pteAddress};
 				return true;
 			};
 
 			auto reload3 = [&] {
-				if(_accessor3) /*[[likely]]*/
+				if(_accessor3) { /*[[likely]]*/
 					return true;
-				return doReload(_accessor3, _accessor4, std::integral_constant<int, 39>{});
+				}
+				return doReload(
+					_accessor3,
+					_accessor4,
+					std::integral_constant<int, 39> {}
+				);
 			};
 			auto reload2 = [&] {
-				if(_accessor2) /*[[likely]]*/
+				if(_accessor2) { /*[[likely]]*/
 					return true;
-				if(!reload3())
+				}
+				if(!reload3()) {
 					return false;
-				return doReload(_accessor2, _accessor3, std::integral_constant<int, 30>{});
+				}
+				return doReload(
+					_accessor2,
+					_accessor3,
+					std::integral_constant<int, 30> {}
+				);
 			};
 
-			if(_accessor1) /*[[likely]]*/
+			if(_accessor1) { /*[[likely]]*/
 				return;
-			if(!reload2())
+			}
+			if(!reload2()) {
 				return;
-			doReload(_accessor1, _accessor2, std::integral_constant<int, 21>{});
+			}
+			doReload(_accessor1, _accessor2, std::integral_constant<int, 21> {});
 		}
 
 		void realizePts();
@@ -539,10 +551,10 @@ public:
 		uintptr_t va_ = 0;
 
 		// Accessors for all levels of PTs.
-		PageAccessor _accessor4; // Coarsest level (PML4).
+		PageAccessor _accessor4;  // Coarsest level (PML4).
 		PageAccessor _accessor3;
 		PageAccessor _accessor2;
-		PageAccessor _accessor1; // Finest level (page table).
+		PageAccessor _accessor1;  // Finest level (page table).
 	};
 
 	ClientPageSpace();
@@ -551,10 +563,15 @@ public:
 
 	~ClientPageSpace();
 
-	ClientPageSpace &operator= (const ClientPageSpace &) = delete;
+	ClientPageSpace &operator=(const ClientPageSpace &) = delete;
 
-	void mapSingle4k(VirtualAddr pointer, PhysicalAddr physical, bool user_access,
-			uint32_t flags, CachingMode caching_mode);
+	void mapSingle4k(
+		VirtualAddr pointer,
+		PhysicalAddr physical,
+		bool user_access,
+		uint32_t flags,
+		CachingMode caching_mode
+	);
 	PageStatus unmapSingle4k(VirtualAddr pointer);
 	PageStatus cleanSingle4k(VirtualAddr pointer);
 	bool isMapped(VirtualAddr pointer);
@@ -568,4 +585,4 @@ void invalidatePage(const void *address);
 
 void invalidateFullTlb();
 
-} // namespace thor
+}  // namespace thor

@@ -9,4 +9,4 @@ void initializeArchitecture() {
 	setupEarlyInterruptHandlers();
 }
 
-} // namespace thor
+}  // namespace thor

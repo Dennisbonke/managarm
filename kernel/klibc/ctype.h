@@ -21,4 +21,4 @@ int toupper(int c);
 }
 #endif
 
-#endif // THOR_LIBC_CTYPE_H
+#endif  // THOR_LIBC_CTYPE_H

@@ -1,13 +1,13 @@
-#include <sys/epoll.h>
-#include <map>
-
-#include <frg/std_compat.hpp>
-#include <protocols/fs/client.hpp>
-#include "common.hpp"
 #include "extern_fs.hpp"
+
+#include "common.hpp"
 #include "fs.bragi.hpp"
 
 #include <bitset>
+#include <frg/std_compat.hpp>
+#include <map>
+#include <protocols/fs/client.hpp>
+#include <sys/epoll.h>
 
 namespace extern_fs {
 
@@ -23,20 +23,22 @@ struct Superblock final : FsSuperblock {
 	FutureMaybe<std::shared_ptr<FsNode>> createSocket() override;
 
 	async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
-			rename(FsLink *source, FsNode *directory, std::string name) override;
+	rename(FsLink *source, FsNode *directory, std::string name) override;
 
 	std::shared_ptr<Node> internalizeStructural(uint64_t id, helix::UniqueLane lane);
-	std::shared_ptr<Node> internalizeStructural(Node *owner, std::string name,
-			uint64_t id, helix::UniqueLane lane);
-	std::shared_ptr<Node> internalizePeripheralNode(int64_t type, int id, helix::UniqueLane lane);
-	std::shared_ptr<FsLink> internalizePeripheralLink(Node *parent, std::string name,
-			std::shared_ptr<Node> target);
+	std::shared_ptr<Node>
+	internalizeStructural(Node *owner, std::string name, uint64_t id, helix::UniqueLane lane);
+	std::shared_ptr<Node>
+	internalizePeripheralNode(int64_t type, int id, helix::UniqueLane lane);
+	std::shared_ptr<FsLink>
+	internalizePeripheralLink(Node *parent, std::string name, std::shared_ptr<Node> target);
 
 private:
 	helix::UniqueLane _lane;
 	std::map<uint64_t, std::weak_ptr<DirectoryNode>> _activeStructural;
 	std::map<uint64_t, std::weak_ptr<Node>> _activePeripheralNodes;
-	std::map<std::tuple<uint64_t, std::string, uint64_t>, std::weak_ptr<FsLink>> _activePeripheralLinks;
+	std::map<std::tuple<uint64_t, std::string, uint64_t>, std::weak_ptr<FsLink>>
+		_activePeripheralLinks;
 };
 
 struct Node : FsNode {
@@ -49,10 +51,13 @@ struct Node : FsNode {
 		req.set_req_type(managarm::fs::CntReqType::NODE_GET_STATS);
 
 		auto ser = req.SerializeAsString();
-		auto &&transmit = helix::submitAsync(getLane(), helix::Dispatcher::global(),
-				helix::action(&offer, kHelItemAncillary),
-				helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
-				helix::action(&recv_resp));
+		auto &&transmit = helix::submitAsync(
+			getLane(),
+			helix::Dispatcher::global(),
+			helix::action(&offer, kHelItemAncillary),
+			helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
+			helix::action(&recv_resp)
+		);
 		co_await transmit.async_wait();
 		HEL_CHECK(offer.error());
 		HEL_CHECK(send_req.error());
@@ -62,8 +67,8 @@ struct Node : FsNode {
 		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
 		assert(resp.error() == managarm::fs::Errors::SUCCESS);
 
-		FileStats stats{};
-		stats.inodeNumber = getInode(); // TODO: Move this out of FileStats.
+		FileStats stats {};
+		stats.inodeNumber = getInode();  // TODO: Move this out of FileStats.
 		stats.fileSize = resp.file_size();
 		stats.numLinks = resp.num_links();
 		stats.mode = resp.mode();
@@ -104,7 +109,9 @@ struct Node : FsNode {
 		co_return Error::success;
 	}
 
-	async::result<Error> utimensat(uint64_t atime_sec, uint64_t atime_nsec, uint64_t mtime_sec, uint64_t mtime_nsec) override {
+	async::result<Error>
+	utimensat(uint64_t atime_sec, uint64_t atime_nsec, uint64_t mtime_sec, uint64_t mtime_nsec)
+		override {
 		managarm::fs::CntRequest req;
 		req.set_req_type(managarm::fs::CntReqType::NODE_UTIMENSAT);
 		req.set_atime_sec(atime_sec);
@@ -132,30 +139,23 @@ struct Node : FsNode {
 		co_return Error::success;
 	}
 
-
 public:
 	Node(uint64_t inode, helix::UniqueLane lane, Superblock *sb = nullptr)
-	: FsNode{sb}, _inode{inode}, _lane{std::move(lane)} { }
+	: FsNode {sb}
+	, _inode {inode}
+	, _lane {std::move(lane)} {}
 
 protected:
 	~Node() = default;
 
 public:
-	uint64_t getInode() {
-		return _inode;
-	}
+	uint64_t getInode() { return _inode; }
 
-	helix::BorrowedLane getLane() {
-		return _lane;
-	}
+	helix::BorrowedLane getLane() { return _lane; }
 
-	void setupWeakNode(std::weak_ptr<Node> self) {
-		_self = std::move(self);
-	}
+	void setupWeakNode(std::weak_ptr<Node> self) { _self = std::move(self); }
 
-	std::weak_ptr<Node> weakNode() {
-		return _self;
-	}
+	std::weak_ptr<Node> weakNode() { return _self; }
 
 private:
 	std::weak_ptr<Node> _self;
@@ -179,21 +179,22 @@ private:
 	}
 
 	async::result<frg::expected<Error, PollWaitResult>>
-	pollWait(Process *, uint64_t sequence, int mask,
-			async::cancellation_token cancellation) override {
-		(void)mask;
+	pollWait(Process *, uint64_t sequence, int mask, async::cancellation_token cancellation)
+		override {
+		(void) mask;
 
-		if(sequence > 1)
+		if(sequence > 1) {
 			co_return Error::illegalArguments;
+		}
 
-		if(sequence)
+		if(sequence) {
 			co_await async::suspend_indefinitely(cancellation);
-		co_return PollWaitResult{1, EPOLLIN | EPOLLOUT};
+		}
+		co_return PollWaitResult {1, EPOLLIN | EPOLLOUT};
 	}
 
-	async::result<frg::expected<Error, PollStatusResult>>
-	pollStatus(Process *) override {
-		co_return PollStatusResult{1, EPOLLIN | EPOLLOUT};
+	async::result<frg::expected<Error, PollStatusResult>> pollStatus(Process *) override {
+		co_return PollStatusResult {1, EPOLLIN | EPOLLOUT};
 	}
 
 	FutureMaybe<helix::UniqueDescriptor> accessMemory() override {
@@ -201,15 +202,18 @@ private:
 		co_return std::move(memory);
 	}
 
-	helix::BorrowedDescriptor getPassthroughLane() override {
-		return _file.getLane();
-	}
+	helix::BorrowedDescriptor getPassthroughLane() override { return _file.getLane(); }
 
 public:
-	OpenFile(helix::UniqueLane control, helix::UniqueLane lane,
-			std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link)
-	: File{StructName::get("externfs.file"), std::move(mount), std::move(link)},
-			_control{std::move(control)}, _file{std::move(lane)} { }
+	OpenFile(
+		helix::UniqueLane control,
+		helix::UniqueLane lane,
+		std::shared_ptr<MountView> mount,
+		std::shared_ptr<FsLink> link
+	)
+	: File {StructName::get("externfs.file"), std::move(mount), std::move(link)}
+	, _control {std::move(control)}
+	, _file {std::move(lane)} {}
 
 	~OpenFile() {
 		// It's not necessary to do any cleanup here.
@@ -217,7 +221,7 @@ public:
 
 	void handleClose() override {
 		// Close the control lane to inform the server that we closed the file.
-		_control = helix::UniqueLane{};
+		_control = helix::UniqueLane {};
 	}
 
 	async::result<frg::expected<protocols::fs::Error>> truncate(size_t size) override {
@@ -226,8 +230,8 @@ public:
 		req.set_size(size);
 
 		auto ser = req.SerializeAsString();
-		auto [offer, send_req, recv_resp]
-				= co_await helix_ng::exchangeMsgs(getPassthroughLane(),
+		auto [offer, send_req, recv_resp] = co_await helix_ng::exchangeMsgs(
+			getPassthroughLane(),
 			helix_ng::offer(
 				helix_ng::sendBuffer(ser.data(), ser.size()),
 				helix_ng::recvInline()
@@ -251,18 +255,18 @@ private:
 
 struct RegularNode final : Node {
 private:
-	VfsType getType() override {
-		return VfsType::regular;
-	}
+	VfsType getType() override { return VfsType::regular; }
 
 	async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-	open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			SemanticFlags semantic_flags) override {
+	open(std::shared_ptr<MountView> mount,
+	     std::shared_ptr<FsLink> link,
+	     SemanticFlags semantic_flags) override {
 		// Regular files do not support O_NONBLOCK.
 		semantic_flags &= ~semanticNonBlock;
 
-		if(semantic_flags & ~(semanticRead | semanticWrite)){
-			std::cout << "\e[31mposix: open() received illegal arguments:"
+		if(semantic_flags & ~(semanticRead | semanticWrite)) {
+			std::cout
+				<< "\e[31mposix: open() received illegal arguments:"
 				<< std::bitset<32>(semantic_flags)
 				<< "\nOnly semanticRead (0x2) and semanticWrite(0x4) are allowed.\e[39m"
 				<< std::endl;
@@ -278,12 +282,15 @@ private:
 		req.set_req_type(managarm::fs::CntReqType::NODE_OPEN);
 
 		auto ser = req.SerializeAsString();
-		auto &&transmit = helix::submitAsync(getLane(), helix::Dispatcher::global(),
-				helix::action(&offer, kHelItemAncillary),
-				helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
-				helix::action(&recv_resp, kHelItemChain),
-				helix::action(&pull_ctrl, kHelItemChain),
-				helix::action(&pull_passthrough));
+		auto &&transmit = helix::submitAsync(
+			getLane(),
+			helix::Dispatcher::global(),
+			helix::action(&offer, kHelItemAncillary),
+			helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
+			helix::action(&recv_resp, kHelItemChain),
+			helix::action(&pull_ctrl, kHelItemChain),
+			helix::action(&pull_passthrough)
+		);
 		co_await transmit.async_wait();
 		HEL_CHECK(offer.error());
 		HEL_CHECK(send_req.error());
@@ -295,22 +302,24 @@ private:
 		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
 		assert(resp.error() == managarm::fs::Errors::SUCCESS);
 
-		auto file = smarter::make_shared<OpenFile>(pull_ctrl.descriptor(),
-				pull_passthrough.descriptor(), std::move(mount), std::move(link));
+		auto file = smarter::make_shared<OpenFile>(
+			pull_ctrl.descriptor(),
+			pull_passthrough.descriptor(),
+			std::move(mount),
+			std::move(link)
+		);
 		file->setupWeakFile(file);
 		co_return File::constructHandle(std::move(file));
 	}
 
 public:
 	RegularNode(Superblock *sb, uint64_t inode, helix::UniqueLane lane)
-	: Node{inode, std::move(lane), sb} { }
+	: Node {inode, std::move(lane), sb} {}
 };
 
 struct SymlinkNode final : Node {
 private:
-	VfsType getType() override {
-		return VfsType::symlink;
-	}
+	VfsType getType() override { return VfsType::symlink; }
 
 	expected<std::string> readSymlink(FsLink *, Process *) override {
 		helix::Offer offer;
@@ -322,11 +331,14 @@ private:
 		req.set_req_type(managarm::fs::CntReqType::NODE_READ_SYMLINK);
 
 		auto ser = req.SerializeAsString();
-		auto &&transmit = helix::submitAsync(getLane(), helix::Dispatcher::global(),
-				helix::action(&offer, kHelItemAncillary),
-				helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
-				helix::action(&recv_resp, kHelItemChain),
-				helix::action(&recv_target));
+		auto &&transmit = helix::submitAsync(
+			getLane(),
+			helix::Dispatcher::global(),
+			helix::action(&offer, kHelItemAncillary),
+			helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
+			helix::action(&recv_resp, kHelItemChain),
+			helix::action(&recv_target)
+		);
 		co_await transmit.async_wait();
 		HEL_CHECK(offer.error());
 		HEL_CHECK(send_req.error());
@@ -337,19 +349,18 @@ private:
 		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
 		assert(resp.error() == managarm::fs::Errors::SUCCESS);
 
-		co_return std::string{static_cast<char *>(recv_target.data()), recv_target.length()};
+		co_return std::string {
+			static_cast<char *>(recv_target.data()),
+			recv_target.length()};
 	}
 
 public:
-	SymlinkNode(uint64_t inode, helix::UniqueLane lane)
-	: Node{inode, std::move(lane)} { }
+	SymlinkNode(uint64_t inode, helix::UniqueLane lane) : Node {inode, std::move(lane)} {}
 };
 
 struct Link : FsLink {
 public:
-	std::shared_ptr<FsNode> getOwner() override {
-		return _owner;
-	}
+	std::shared_ptr<FsNode> getOwner() override { return _owner; }
 
 	async::result<frg::expected<Error>> obstruct() override {
 		assert(_owner);
@@ -375,7 +386,7 @@ public:
 		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
 		recv_resp.reset();
 		assert(resp.error() == managarm::fs::Errors::SUCCESS);
-		co_return frg::success_tag{};
+		co_return frg::success_tag {};
 	}
 
 private:
@@ -388,7 +399,8 @@ public:
 	Link() = default;
 
 	Link(std::shared_ptr<FsNode> owner, std::string name)
-	: _owner{std::move(owner)}, _name{std::move(name)} {
+	: _owner {std::move(owner)}
+	, _name {std::move(name)} {
 		assert(_owner);
 	}
 
@@ -403,14 +415,16 @@ private:
 // This class maintains a strong reference to the target.
 struct PeripheralLink final : Link {
 private:
-	std::shared_ptr<FsNode> getTarget() override {
-		return _target;
-	}
+	std::shared_ptr<FsNode> getTarget() override { return _target; }
 
 public:
-	PeripheralLink(std::shared_ptr<FsNode> owner,
-			std::string name, std::shared_ptr<FsNode> target)
-	: Link{std::move(owner), std::move(name)}, _target{std::move(target)} { }
+	PeripheralLink(
+		std::shared_ptr<FsNode> owner,
+		std::string name,
+		std::shared_ptr<FsNode> target
+	)
+	: Link {std::move(owner), std::move(name)}
+	, _target {std::move(target)} {}
 
 private:
 	std::string _name;
@@ -423,13 +437,11 @@ private:
 	std::shared_ptr<FsNode> getTarget() override;
 
 public:
-	StructuralLink(DirectoryNode *target)
-	: _target{std::move(target)} {
-		assert(_target);
-	}
+	StructuralLink(DirectoryNode *target) : _target {std::move(target)} { assert(_target); }
 
 	StructuralLink(std::shared_ptr<FsNode> owner, DirectoryNode *target, std::string name)
-	: Link{std::move(owner), std::move(name)}, _target{std::move(target)} {
+	: Link {std::move(owner), std::move(name)}
+	, _target {std::move(target)} {
 		assert(_target);
 	}
 
@@ -439,33 +451,31 @@ private:
 
 struct DirectoryNode final : Node {
 private:
-	VfsType getType() override {
-		return VfsType::directory;
-	}
+	VfsType getType() override { return VfsType::directory; }
 
 	std::shared_ptr<FsLink> treeLink() override {
-		auto self = std::shared_ptr<FsNode>{weakNode()};
-		return std::shared_ptr<FsLink>{std::move(self), &_treeLink};
+		auto self = std::shared_ptr<FsNode> {weakNode()};
+		return std::shared_ptr<FsLink> {std::move(self), &_treeLink};
 	}
 
-	bool hasTraverseLinks() override {
-		return true;
-	}
+	bool hasTraverseLinks() override { return true; }
 
 	async::result<frg::expected<Error, std::pair<std::shared_ptr<FsLink>, size_t>>>
 	traverseLinks(std::deque<std::string> path) override {
 		managarm::fs::NodeTraverseLinksRequest req;
-		for (auto &i : path)
+		for(auto &i : path) {
 			req.add_path_segments(i);
+		}
 
-		auto [offer, send_head, send_tail, recv_resp, pull_desc] = co_await helix_ng::exchangeMsgs(
-			getLane(),
-			helix_ng::offer(
-				helix_ng::sendBragiHeadTail(req, frg::stl_allocator{}),
-				helix_ng::recvInline(),
-				helix_ng::pullDescriptor()
-			)
-		);
+		auto [offer, send_head, send_tail, recv_resp, pull_desc] =
+			co_await helix_ng::exchangeMsgs(
+				getLane(),
+				helix_ng::offer(
+					helix_ng::sendBragiHeadTail(req, frg::stl_allocator {}),
+					helix_ng::recvInline(),
+					helix_ng::pullDescriptor()
+				)
+			);
 
 		HEL_CHECK(offer.error());
 		HEL_CHECK(send_head.error());
@@ -478,9 +488,9 @@ private:
 		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
 		recv_resp.reset();
 
-		if (resp.error() == managarm::fs::Errors::FILE_NOT_FOUND) {
+		if(resp.error() == managarm::fs::Errors::FILE_NOT_FOUND) {
 			co_return Error::noSuchFile;
-		} else if (resp.error() == managarm::fs::Errors::NOT_DIRECTORY) {
+		} else if(resp.error() == managarm::fs::Errors::NOT_DIRECTORY) {
 			co_return Error::notDirectory;
 		} else {
 			assert(resp.error() == managarm::fs::Errors::SUCCESS);
@@ -492,8 +502,8 @@ private:
 		assert(resp.links_traversed());
 		assert(resp.links_traversed() <= path.size());
 
-		std::shared_ptr<Node> parentNode{weakNode()};
-		for (size_t i = 0; i < resp.ids().size(); i++) {
+		std::shared_ptr<Node> parentNode {weakNode()};
+		for(size_t i = 0; i < resp.ids().size(); i++) {
 			auto [pull_node] = co_await helix_ng::exchangeMsgs(
 				pull_lane,
 				helix_ng::pullDescriptor()
@@ -501,26 +511,38 @@ private:
 
 			HEL_CHECK(pull_node.error());
 
-			if (i != resp.ids().size() - 1
-					|| resp.file_type() == managarm::fs::FileType::DIRECTORY) {
-				auto child = _sb->internalizeStructural(parentNode.get(), path[i],
-						resp.ids()[i], pull_node.descriptor());
-				if (i != resp.ids().size() - 1)
+			if(i != resp.ids().size() - 1
+			   || resp.file_type() == managarm::fs::FileType::DIRECTORY) {
+				auto child = _sb->internalizeStructural(
+					parentNode.get(),
+					path[i],
+					resp.ids()[i],
+					pull_node.descriptor()
+				);
+				if(i != resp.ids().size() - 1) {
 					parentNode = child;
-				else
+				} else {
 					link = child->treeLink();
-			}else{
-				auto child = _sb->internalizePeripheralNode(resp.file_type(), resp.ids()[i],
-						pull_node.descriptor());
-				link = _sb->internalizePeripheralLink(parentNode.get(), path[i], std::move(child));
+				}
+			} else {
+				auto child = _sb->internalizePeripheralNode(
+					resp.file_type(),
+					resp.ids()[i],
+					pull_node.descriptor()
+				);
+				link = _sb->internalizePeripheralLink(
+					parentNode.get(),
+					path[i],
+					std::move(child)
+				);
 			}
 		}
 
 		co_return std::make_pair(link, resp.links_traversed());
 	}
 
-	async::result<std::variant<Error, std::shared_ptr<FsLink>>>
-	mkdir(std::string name) override {
+	async::result<std::variant<Error, std::shared_ptr<FsLink>>> mkdir(std::string name
+	) override {
 		managarm::fs::CntRequest req;
 		req.set_req_type(managarm::fs::CntReqType::NODE_MKDIR);
 		req.set_path(name);
@@ -544,11 +566,15 @@ private:
 		if(resp.error() == managarm::fs::Errors::SUCCESS) {
 			HEL_CHECK(pullNode.error());
 
-			auto child = _sb->internalizeStructural(this, name,
-					resp.id(), pullNode.descriptor());
+			auto child = _sb->internalizeStructural(
+				this,
+				name,
+				resp.id(),
+				pullNode.descriptor()
+			);
 			co_return child->treeLink();
 		} else {
-			co_return Error::illegalOperationTarget; // TODO
+			co_return Error::illegalOperationTarget;  // TODO
 		}
 	}
 
@@ -560,16 +586,17 @@ private:
 		req.set_target_length(path.size());
 
 		auto ser = req.SerializeAsString();
-		auto [offer, sendReq, sendName, sendTarget, recvResp, pullNode]
-			= co_await helix_ng::exchangeMsgs(getLane(),
-			helix_ng::offer(
-				helix_ng::sendBuffer(ser.data(), ser.size()),
-				helix_ng::sendBuffer(name.data(), name.size()),
-				helix_ng::sendBuffer(path.data(), path.size()),
-				helix_ng::recvInline(),
-				helix_ng::pullDescriptor()
-			)
-		);
+		auto [offer, sendReq, sendName, sendTarget, recvResp, pullNode] =
+			co_await helix_ng::exchangeMsgs(
+				getLane(),
+				helix_ng::offer(
+					helix_ng::sendBuffer(ser.data(), ser.size()),
+					helix_ng::sendBuffer(name.data(), name.size()),
+					helix_ng::sendBuffer(path.data(), path.size()),
+					helix_ng::recvInline(),
+					helix_ng::pullDescriptor()
+				)
+			);
 		HEL_CHECK(offer.error());
 		HEL_CHECK(sendReq.error());
 		HEL_CHECK(sendName.error());
@@ -582,24 +609,29 @@ private:
 		if(resp.error() == managarm::fs::Errors::SUCCESS) {
 			HEL_CHECK(pullNode.error());
 
-			auto child = _sb->internalizeStructural(this, name,
-					resp.id(), pullNode.descriptor());
+			auto child = _sb->internalizeStructural(
+				this,
+				name,
+				resp.id(),
+				pullNode.descriptor()
+			);
 			co_return child->treeLink();
 		} else {
-			co_return Error::illegalOperationTarget; // TODO
+			co_return Error::illegalOperationTarget;  // TODO
 		}
 	}
 
-	async::result<frg::expected<Error, std::shared_ptr<FsLink>>> mkdev(std::string name, VfsType type, DeviceId id) override {
-		(void)name;
-		(void)type;
-		(void)id;
+	async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
+	mkdev(std::string name, VfsType type, DeviceId id) override {
+		(void) name;
+		(void) type;
+		(void) id;
 		assert(!"mkdev is not implemented for extern_fs");
 		__builtin_unreachable();
 	}
 
-	async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
-			getLink(std::string name) override {
+	async::result<frg::expected<Error, std::shared_ptr<FsLink>>> getLink(std::string name
+	) override {
 		helix::Offer offer;
 		helix::SendBuffer send_req;
 		helix::RecvInline recv_resp;
@@ -610,11 +642,14 @@ private:
 		req.set_path(name);
 
 		auto ser = req.SerializeAsString();
-		auto &&transmit = helix::submitAsync(getLane(), helix::Dispatcher::global(),
-				helix::action(&offer, kHelItemAncillary),
-				helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
-				helix::action(&recv_resp, kHelItemChain),
-				helix::action(&pull_node));
+		auto &&transmit = helix::submitAsync(
+			getLane(),
+			helix::Dispatcher::global(),
+			helix::action(&offer, kHelItemAncillary),
+			helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
+			helix::action(&recv_resp, kHelItemChain),
+			helix::action(&pull_node)
+		);
 		co_await transmit.async_wait();
 		HEL_CHECK(offer.error());
 		HEL_CHECK(send_req.error());
@@ -626,24 +661,32 @@ private:
 			HEL_CHECK(pull_node.error());
 
 			if(resp.file_type() == managarm::fs::FileType::DIRECTORY) {
-				auto child = _sb->internalizeStructural(this, name,
-						resp.id(), pull_node.descriptor());
+				auto child = _sb->internalizeStructural(
+					this,
+					name,
+					resp.id(),
+					pull_node.descriptor()
+				);
 				co_return child->treeLink();
-			}else{
-				auto child = _sb->internalizePeripheralNode(resp.file_type(), resp.id(),
-						pull_node.descriptor());
-				co_return _sb->internalizePeripheralLink(this, name, std::move(child));
+			} else {
+				auto child = _sb->internalizePeripheralNode(
+					resp.file_type(),
+					resp.id(),
+					pull_node.descriptor()
+				);
+				co_return _sb
+					->internalizePeripheralLink(this, name, std::move(child));
 			}
-		}else if(resp.error() == managarm::fs::Errors::FILE_NOT_FOUND) {
+		} else if(resp.error() == managarm::fs::Errors::FILE_NOT_FOUND) {
 			co_return nullptr;
-		}else{
+		} else {
 			assert(resp.error() == managarm::fs::Errors::NOT_DIRECTORY);
 			co_return Error::notDirectory;
 		}
 	}
 
-	async::result<frg::expected<Error, std::shared_ptr<FsLink>>> link(std::string name,
-			std::shared_ptr<FsNode> target) override {
+	async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
+	link(std::string name, std::shared_ptr<FsNode> target) override {
 		helix::Offer offer;
 		helix::SendBuffer send_req;
 		helix::RecvInline recv_resp;
@@ -655,11 +698,14 @@ private:
 		req.set_fd(static_cast<Node *>(target.get())->getInode());
 
 		auto ser = req.SerializeAsString();
-		auto &&transmit = helix::submitAsync(getLane(), helix::Dispatcher::global(),
-				helix::action(&offer, kHelItemAncillary),
-				helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
-				helix::action(&recv_resp, kHelItemChain),
-				helix::action(&pull_node));
+		auto &&transmit = helix::submitAsync(
+			getLane(),
+			helix::Dispatcher::global(),
+			helix::action(&offer, kHelItemAncillary),
+			helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
+			helix::action(&recv_resp, kHelItemChain),
+			helix::action(&pull_node)
+		);
 		co_await transmit.async_wait();
 		HEL_CHECK(offer.error());
 		HEL_CHECK(send_req.error());
@@ -671,15 +717,23 @@ private:
 			HEL_CHECK(pull_node.error());
 
 			if(resp.file_type() == managarm::fs::FileType::DIRECTORY) {
-				auto child = _sb->internalizeStructural(this, name,
-						resp.id(), pull_node.descriptor());
+				auto child = _sb->internalizeStructural(
+					this,
+					name,
+					resp.id(),
+					pull_node.descriptor()
+				);
 				co_return child->treeLink();
-			}else{
-				auto child = _sb->internalizePeripheralNode(resp.file_type(), resp.id(),
-						pull_node.descriptor());
-				co_return _sb->internalizePeripheralLink(this, name, std::move(child));
+			} else {
+				auto child = _sb->internalizePeripheralNode(
+					resp.file_type(),
+					resp.id(),
+					pull_node.descriptor()
+				);
+				co_return _sb
+					->internalizePeripheralLink(this, name, std::move(child));
 			}
-		}else{
+		} else {
 			co_return nullptr;
 		}
 	}
@@ -694,10 +748,13 @@ private:
 		req.set_path(name);
 
 		auto ser = req.SerializeAsString();
-		auto &&transmit = helix::submitAsync(getLane(), helix::Dispatcher::global(),
-				helix::action(&offer, kHelItemAncillary),
-				helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
-				helix::action(&recv_resp));
+		auto &&transmit = helix::submitAsync(
+			getLane(),
+			helix::Dispatcher::global(),
+			helix::action(&offer, kHelItemAncillary),
+			helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
+			helix::action(&recv_resp)
+		);
 		co_await transmit.async_wait();
 		HEL_CHECK(offer.error());
 		HEL_CHECK(send_req.error());
@@ -705,8 +762,9 @@ private:
 
 		managarm::fs::SvrResponse resp;
 		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
-		if(resp.error() == managarm::fs::Errors::FILE_NOT_FOUND)
+		if(resp.error() == managarm::fs::Errors::FILE_NOT_FOUND) {
 			co_return Error::noSuchFile;
+		}
 		assert(resp.error() == managarm::fs::Errors::SUCCESS);
 		co_return {};
 	}
@@ -737,13 +795,15 @@ private:
 	}
 
 	async::result<frg::expected<Error, smarter::shared_ptr<File, FileHandle>>>
-	open(std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link,
-			SemanticFlags semantic_flags) override {
+	open(std::shared_ptr<MountView> mount,
+	     std::shared_ptr<FsLink> link,
+	     SemanticFlags semantic_flags) override {
 		// Regular files do not support O_NONBLOCK.
 		semantic_flags &= ~semanticNonBlock;
 
-		if(semantic_flags & ~(semanticRead | semanticWrite)){
-			std::cout << "\e[31mposix: open() received illegal arguments:"
+		if(semantic_flags & ~(semanticRead | semanticWrite)) {
+			std::cout
+				<< "\e[31mposix: open() received illegal arguments:"
 				<< std::bitset<32>(semantic_flags)
 				<< "\nOnly semanticRead (0x2) and semanticWrite(0x4) are allowed.\e[39m"
 				<< std::endl;
@@ -759,12 +819,15 @@ private:
 		req.set_req_type(managarm::fs::CntReqType::NODE_OPEN);
 
 		auto ser = req.SerializeAsString();
-		auto &&transmit = helix::submitAsync(getLane(), helix::Dispatcher::global(),
-				helix::action(&offer, kHelItemAncillary),
-				helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
-				helix::action(&recv_resp, kHelItemChain),
-				helix::action(&pull_ctrl, kHelItemChain),
-				helix::action(&pull_passthrough));
+		auto &&transmit = helix::submitAsync(
+			getLane(),
+			helix::Dispatcher::global(),
+			helix::action(&offer, kHelItemAncillary),
+			helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
+			helix::action(&recv_resp, kHelItemChain),
+			helix::action(&pull_ctrl, kHelItemChain),
+			helix::action(&pull_passthrough)
+		);
 		co_await transmit.async_wait();
 		HEL_CHECK(offer.error());
 		HEL_CHECK(send_req.error());
@@ -776,21 +839,32 @@ private:
 		resp.ParseFromArray(recv_resp.data(), recv_resp.length());
 		assert(resp.error() == managarm::fs::Errors::SUCCESS);
 
-		auto file = smarter::make_shared<OpenFile>(pull_ctrl.descriptor(),
-				pull_passthrough.descriptor(), std::move(mount), std::move(link));
+		auto file = smarter::make_shared<OpenFile>(
+			pull_ctrl.descriptor(),
+			pull_passthrough.descriptor(),
+			std::move(mount),
+			std::move(link)
+		);
 		file->setupWeakFile(file);
 		co_return File::constructHandle(std::move(file));
 	}
 
 public:
 	DirectoryNode(Superblock *sb, uint64_t inode, helix::UniqueLane lane)
-	: Node{inode, std::move(lane), sb}, _sb{sb},
-			_treeLink{this} { }
+	: Node {inode, std::move(lane), sb}
+	, _sb {sb}
+	, _treeLink {this} {}
 
-	DirectoryNode(Superblock *sb, std::shared_ptr<Node> owner, std::string name,
-			uint64_t inode, helix::UniqueLane lane)
-	: Node{inode, std::move(lane), sb}, _sb{sb},
-			_treeLink{std::move(owner), this, std::move(name)} { }
+	DirectoryNode(
+		Superblock *sb,
+		std::shared_ptr<Node> owner,
+		std::string name,
+		uint64_t inode,
+		helix::UniqueLane lane
+	)
+	: Node {inode, std::move(lane), sb}
+	, _sb {sb}
+	, _treeLink {std::move(owner), this, std::move(name)} {}
 
 private:
 	Superblock *_sb;
@@ -798,11 +872,10 @@ private:
 };
 
 std::shared_ptr<FsNode> StructuralLink::getTarget() {
-	return std::shared_ptr<Node>{_target->weakNode()};
+	return std::shared_ptr<Node> {_target->weakNode()};
 }
 
-Superblock::Superblock(helix::UniqueLane lane)
-: _lane{std::move(lane)} { }
+Superblock::Superblock(helix::UniqueLane lane) : _lane {std::move(lane)} {}
 
 FutureMaybe<std::shared_ptr<FsNode>> Superblock::createRegular() {
 	helix::Offer offer;
@@ -814,11 +887,14 @@ FutureMaybe<std::shared_ptr<FsNode>> Superblock::createRegular() {
 	req.set_req_type(managarm::fs::CntReqType::SB_CREATE_REGULAR);
 
 	auto ser = req.SerializeAsString();
-	auto &&transmit = helix::submitAsync(_lane, helix::Dispatcher::global(),
-			helix::action(&offer, kHelItemAncillary),
-			helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
-			helix::action(&recv_resp, kHelItemChain),
-			helix::action(&pull_node));
+	auto &&transmit = helix::submitAsync(
+		_lane,
+		helix::Dispatcher::global(),
+		helix::action(&offer, kHelItemAncillary),
+		helix::action(&send_req, ser.data(), ser.size(), kHelItemChain),
+		helix::action(&recv_resp, kHelItemChain),
+		helix::action(&pull_node)
+	);
 	co_await transmit.async_wait();
 	HEL_CHECK(offer.error());
 	HEL_CHECK(send_req.error());
@@ -829,9 +905,12 @@ FutureMaybe<std::shared_ptr<FsNode>> Superblock::createRegular() {
 	if(resp.error() == managarm::fs::Errors::SUCCESS) {
 		HEL_CHECK(pull_node.error());
 
-		co_return internalizePeripheralNode(resp.file_type(), resp.id(),
-				pull_node.descriptor());
-	}else{
+		co_return internalizePeripheralNode(
+			resp.file_type(),
+			resp.id(),
+			pull_node.descriptor()
+		);
+	} else {
 		co_return nullptr;
 	}
 }
@@ -841,8 +920,7 @@ FutureMaybe<std::shared_ptr<FsNode>> Superblock::createSocket() {
 }
 
 async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
-		Superblock::rename(FsLink *source, FsNode *directory, std::string name) {
-
+Superblock::rename(FsLink *source, FsNode *directory, std::string name) {
 	managarm::fs::RenameRequest req;
 	Link *slink = static_cast<Link *>(source);
 	Node *source_node = static_cast<Node *>(slink->getOwner().get());
@@ -856,7 +934,7 @@ async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
 	auto [offer, send_head, send_tail, recv_resp] = co_await helix_ng::exchangeMsgs(
 		_lane,
 		helix_ng::offer(
-			helix_ng::sendBragiHeadTail(req, frg::stl_allocator{}),
+			helix_ng::sendBragiHeadTail(req, frg::stl_allocator {}),
 			helix_ng::recvInline()
 		)
 	);
@@ -871,7 +949,7 @@ async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
 	recv_resp.reset();
 	if(resp.error() == managarm::fs::Errors::SUCCESS) {
 		co_return internalizePeripheralLink(target_node, name, shared_node);
-	}else{
+	} else {
 		co_return nullptr;
 	}
 }
@@ -879,8 +957,9 @@ async::result<frg::expected<Error, std::shared_ptr<FsLink>>>
 std::shared_ptr<Node> Superblock::internalizeStructural(uint64_t id, helix::UniqueLane lane) {
 	auto entry = &_activeStructural[id];
 	auto intern = entry->lock();
-	if(intern)
+	if(intern) {
 		return intern;
+	}
 
 	auto node = std::make_shared<DirectoryNode>(this, id, std::move(lane));
 	node->setupWeakNode(node);
@@ -888,26 +967,33 @@ std::shared_ptr<Node> Superblock::internalizeStructural(uint64_t id, helix::Uniq
 	return node;
 }
 
-std::shared_ptr<Node> Superblock::internalizeStructural(Node *parent, std::string name,
-		uint64_t id, helix::UniqueLane lane) {
+std::shared_ptr<Node> Superblock::internalizeStructural(
+	Node *parent,
+	std::string name,
+	uint64_t id,
+	helix::UniqueLane lane
+) {
 	auto entry = &_activeStructural[id];
 	auto intern = entry->lock();
-	if(intern)
+	if(intern) {
 		return intern;
+	}
 
-	auto owner = std::shared_ptr<Node>{parent->weakNode()};
-	auto node = std::make_shared<DirectoryNode>(this, owner, std::move(name), id, std::move(lane));
+	auto owner = std::shared_ptr<Node> {parent->weakNode()};
+	auto node =
+		std::make_shared<DirectoryNode>(this, owner, std::move(name), id, std::move(lane));
 	node->setupWeakNode(node);
 	*entry = node;
 	return node;
 }
 
-std::shared_ptr<Node> Superblock::internalizePeripheralNode(int64_t type,
-		int id, helix::UniqueLane lane) {
+std::shared_ptr<Node>
+Superblock::internalizePeripheralNode(int64_t type, int id, helix::UniqueLane lane) {
 	auto entry = &_activePeripheralNodes[id];
 	auto intern = entry->lock();
-	if(intern)
+	if(intern) {
 		return intern;
+	}
 
 	std::shared_ptr<Node> node;
 	switch(type) {
@@ -925,24 +1011,31 @@ std::shared_ptr<Node> Superblock::internalizePeripheralNode(int64_t type,
 	return node;
 }
 
-std::shared_ptr<FsLink> Superblock::internalizePeripheralLink(Node *parent, std::string name,
-		std::shared_ptr<Node> target) {
+std::shared_ptr<FsLink> Superblock::internalizePeripheralLink(
+	Node *parent,
+	std::string name,
+	std::shared_ptr<Node> target
+) {
 	auto entry = &_activePeripheralLinks[{parent->getInode(), name, target->getInode()}];
 	auto intern = entry->lock();
-	if(intern)
+	if(intern) {
 		return intern;
+	}
 
-	auto owner = std::shared_ptr<Node>{parent->weakNode()};
-	auto link = std::make_shared<PeripheralLink>(std::move(owner),
-			std::move(name), std::move(target));
+	auto owner = std::shared_ptr<Node> {parent->weakNode()};
+	auto link = std::make_shared<PeripheralLink>(
+		std::move(owner),
+		std::move(name),
+		std::move(target)
+	);
 	*entry = link;
 	return link;
 }
 
-} // anonymous namespace
+}  // anonymous namespace
 
 std::shared_ptr<FsLink> createRoot(helix::UniqueLane sb_lane, helix::UniqueLane lane) {
-	auto sb = new Superblock{std::move(sb_lane)};
+	auto sb = new Superblock {std::move(sb_lane)};
 	// FIXME: 2 is the ext2fs root inode.
 	auto node = sb->internalizeStructural(2, std::move(lane));
 	return node->treeLink();
@@ -950,11 +1043,14 @@ std::shared_ptr<FsLink> createRoot(helix::UniqueLane sb_lane, helix::UniqueLane 
 
 smarter::shared_ptr<File, FileHandle>
 createFile(helix::UniqueLane lane, std::shared_ptr<MountView> mount, std::shared_ptr<FsLink> link) {
-	auto file = smarter::make_shared<OpenFile>(helix::UniqueLane{},
-			std::move(lane), std::move(mount), std::move(link));
+	auto file = smarter::make_shared<OpenFile>(
+		helix::UniqueLane {},
+		std::move(lane),
+		std::move(mount),
+		std::move(link)
+	);
 	file->setupWeakFile(file);
 	return File::constructHandle(std::move(file));
 }
 
-} // namespace extern_fs
-
+}  // namespace extern_fs

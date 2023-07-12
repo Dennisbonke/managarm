@@ -11,7 +11,6 @@ enum FileType {
 	kTypeSymlink
 };
 
-} // namespace blockfs
+}  // namespace blockfs
 
-#endif // LIBFS_COMMON_H
-
+#endif  // LIBFS_COMMON_H

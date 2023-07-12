@@ -1,22 +1,20 @@
 #pragma once
 
+#include "fs.bragi.hpp"
+#include "tcp4.hpp"
+#include "udp4.hpp"
+
 #include <arch/bit.hpp>
 #include <arch/dma_structs.hpp>
+#include <cstdint>
 #include <helix/ipc.hpp>
 #include <map>
-#include <smarter.hpp>
+#include <memory>
 #include <netserver/nic.hpp>
+#include <optional>
 #include <protocols/fs/common.hpp>
 #include <set>
-#include <cstdint>
-#include <memory>
-#include <optional>
-
-#include "udp4.hpp"
-#include "tcp4.hpp"
-
-#include <netserver/nic.hpp>
-#include "fs.bragi.hpp"
+#include <smarter.hpp>
 
 enum class IpProto : uint16_t {
 	icmp = 1,
@@ -29,13 +27,10 @@ struct CidrAddress {
 	uint8_t prefix;
 
 	inline uint32_t mask() const {
-		return (uint64_t(0xFFFFFFFF) << (32 - prefix))
-			& 0xFFFFFFFF;
+		return (uint64_t(0xFFFFFFFF) << (32 - prefix)) & 0xFFFFFFFF;
 	}
 
-	inline bool sameNet(uint32_t other) const {
-		return (other & mask()) == (ip & mask());
-	}
+	inline bool sameNet(uint32_t other) const { return (other & mask()) == (ip & mask()); }
 
 	friend bool operator<(const CidrAddress &, const CidrAddress &);
 };
@@ -43,7 +38,8 @@ struct CidrAddress {
 struct Ip4Router {
 	struct Route {
 		inline Route(CidrAddress net, std::weak_ptr<nic::Link> link)
-			: network(net), link(link) {}
+		: network(net)
+		, link(link) {}
 
 		CidrAddress network;
 		std::weak_ptr<nic::Link> link;
@@ -65,15 +61,15 @@ struct Ip4Router {
 	bool addRoute(Route r);
 	std::optional<Route> resolveRoute(uint32_t ip);
 
-	inline const std::set<Route> &getRoutes() const {
-		return routes;
-	}
+	inline const std::set<Route> &getRoutes() const { return routes; }
+
 private:
 	std::set<Route> routes;
 };
 
 class Ip4Packet {
 	arch::dma_buffer buffer_;
+
 public:
 	struct Header {
 		uint8_t ihl;
@@ -91,10 +87,9 @@ public:
 		uint32_t destination;
 
 		inline void ensureEndian() {
-			auto nendian = [] (auto &x) {
-				x = arch::convert_endian<
-					arch::endian::big,
-					arch::endian::native>(x);
+			auto nendian = [](auto &x) {
+				x = arch::convert_endian<arch::endian::big, arch::endian::native>(x
+				);
 			};
 			nendian(length);
 			nendian(ident);
@@ -104,16 +99,13 @@ public:
 			nendian(destination);
 		}
 	} header;
+
 	static_assert(sizeof(header) == 20, "bad header size");
 	arch::dma_buffer_view data;
 
-	inline arch::dma_buffer_view payload() const {
-		return data.subview(header.ihl * 4);
-	}
+	inline arch::dma_buffer_view payload() const { return data.subview(header.ihl * 4); }
 
-	inline arch::dma_buffer_view header_view() const {
-		return data.subview(0, header.ihl * 4);
-	}
+	inline arch::dma_buffer_view header_view() const { return data.subview(0, header.ihl * 4); }
 
 	// assumes frame is a valid view into owner
 	bool parse(arch::dma_buffer owner, arch::dma_buffer_view frame);
@@ -127,11 +119,16 @@ struct Ip4TargetInfo {
 };
 
 struct Ip4Socket;
+
 struct Ip4 {
 	managarm::fs::Errors serveSocket(helix::UniqueLane lane, int type, int proto, int flags);
 	// frame is a view into the owner buffer, stripping away eth bits
-	void feedPacket(nic::MacAddress dest, nic::MacAddress src,
-		arch::dma_buffer owner, arch::dma_buffer_view frame);
+	void feedPacket(
+		nic::MacAddress dest,
+		nic::MacAddress src,
+		arch::dma_buffer owner,
+		arch::dma_buffer_view frame
+	);
 
 	bool hasIp(uint32_t ip);
 	std::shared_ptr<nic::Link> getLink(uint32_t ip);
@@ -141,9 +138,8 @@ struct Ip4 {
 	std::optional<uint32_t> findLinkIp(uint32_t ipOnNet, nic::Link *link);
 
 	async::result<std::optional<Ip4TargetInfo>> targetByRemote(uint32_t);
-	async::result<protocols::fs::Error> sendFrame(Ip4TargetInfo,
-		void*, size_t,
-		uint16_t);
+	async::result<protocols::fs::Error> sendFrame(Ip4TargetInfo, void *, size_t, uint16_t);
+
 private:
 	std::multimap<int, smarter::shared_ptr<Ip4Socket>> sockets;
 	std::map<CidrAddress, std::weak_ptr<nic::Link>> ips;
