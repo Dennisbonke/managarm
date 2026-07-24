@@ -727,6 +727,13 @@ _restoreExecutorRegisters:
 	## if fred is enabled dont do an iretq
 	cmpb $1, thorFredEnabled(%rip)
 	je .L_fred
+	testb $3, .L_imageCs(%rdi)
+	jz .L_legacy_iret
+	# Keep kernel GS through the final hook. SWAPGS is intentionally adjacent
+	# to IRETQ, after all hook state access is complete.
+	THOR_SECURITY_FINAL_USER_RETURN
+	swapgs
+.L_legacy_iret:
 	mov .L_imageRdi(%rdi), %rdi
 	iretq
 .L_fred:

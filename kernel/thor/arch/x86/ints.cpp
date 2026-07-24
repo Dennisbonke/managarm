@@ -888,7 +888,6 @@ extern "C" void enableIntsAndHaltForever();
 
 void suspendSelf() {
 	assert(!intsAreEnabled());
-	x86_security::transitionHook(x86_security::TransitionHook::preIdle);
 	enableIntsAndHaltForever();
 }
 

@@ -277,11 +277,8 @@ extern "C" bool thorFredEnabled;
 
 	uint16_t cs = executor->general()->cs;
 	assert(cs == kSelKernelCode || cs == kSelUserCode);
-	if(cs == kSelUserCode) {
+	if(cs == kSelUserCode)
 		x86_security::transitionHook(x86_security::TransitionHook::userReturnPreparation);
-		if(!thorFredEnabled)
-			asm volatile ( "swapgs" : : : "memory" );
-	}
 
 	_restoreExecutorRegisters(executor->general());
 }
