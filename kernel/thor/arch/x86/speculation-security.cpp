@@ -359,19 +359,45 @@ void handleIbpbTransition(const security::TransitionDescriptor &transition) {
 	auto completed = issuePredictorBarrier();
 	if constexpr(collectIbpbEvents)
 		if(completed)
-		__atomic_fetch_add(&getCpuData()->securityIbpbCompletedCount, uint64_t{1}, __ATOMIC_RELAXED);
+			__atomic_fetch_add(&getCpuData()->securityIbpbCompletedCount, uint64_t{1}, __ATOMIC_RELAXED);
 #endif
 }
 
 void reportIbpbDebugSummary() {
 	if constexpr(!security::debugMitigations)
 		return;
+	auto policy = ibpbPolicy().policy();
 	uint64_t attempted = 0;
 	uint64_t completed = 0;
 	for(size_t i = 0; i < getCpuCount(); ++i) {
 		auto *cpu = getCpuData(i);
+		auto &snapshot = cpu->securityCapabilities;
 		attempted += __atomic_load_n(&cpu->securityIbpbAttemptCount, __ATOMIC_RELAXED);
 		completed += __atomic_load_n(&cpu->securityIbpbCompletedCount, __ATOMIC_RELAXED);
+
+		const char *policyName;
+		const char *reason;
+		switch(policy.request) {
+			case security::MechanismRequest::automatic:
+				policyName = "auto";
+				reason = "inactive: affected-CPU applicability is unknown";
+				break;
+			case security::MechanismRequest::disabled:
+				policyName = "disable";
+				reason = "inactive: disabled by policy";
+				break;
+			case security::MechanismRequest::forced:
+				policyName = "enable";
+				reason = snapshot.observed && canIssuePredictorBarrier(snapshot)
+					? "eligible on distinct user-process switches"
+					: "inactive: local CPUID does not enumerate IBPB";
+				break;
+		}
+		debugLogger() << "thor: IBPB CPU " << cpu->cpuIndex << "; policy " << policyName
+				<< "; local mechanism "
+				<< (snapshot.observed && canIssuePredictorBarrier(snapshot)
+						? "available" : "unavailable")
+				<< "; " << reason << frg::endlog;
 	}
 	debugLogger() << "thor: IBPB attempted " << attempted << ", completed " << completed
 			<< frg::endlog;
