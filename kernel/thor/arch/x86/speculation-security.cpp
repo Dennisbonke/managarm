@@ -133,6 +133,18 @@ initgraph::Stage *getSecurityPolicyFrozenStage() {
 	return &stage;
 }
 
+#if defined(THOR_SECURITY_TEST_HOOKS)
+void transitionHook(TransitionHook hook) {
+	auto &counter = getCpuData()->securityTransitionCounters[static_cast<size_t>(hook)];
+	__atomic_fetch_add(&counter, uint64_t{1}, __ATOMIC_RELAXED);
+}
+
+uint64_t transitionHookCount(TransitionHook hook) {
+	auto &counter = getCpuData()->securityTransitionCounters[static_cast<size_t>(hook)];
+	return __atomic_load_n(&counter, __ATOMIC_RELAXED);
+}
+#endif
+
 static initgraph::Task freezeSecurityPolicyTask{&globalInitEngine, "x86.freeze-security-policy",
 		initgraph::Entails{getSecurityPolicyFrozenStage()}, [] {
 		// thorMain() initializes the command line before the init graph runs.

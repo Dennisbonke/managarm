@@ -1,12 +1,23 @@
+#include <thor-internal/arch/asm.h>
+
 .set HOST_RSP, 0x00006c14
 .set HOST_RIP, 0x00006c16
 
 
 .section .text
+#ifdef THOR_SECURITY_TEST_HOOKS
+.macro THOR_SECURITY_PRE_VM_ENTRY
+	incq %gs:THOR_GS_SECURITY_PRE_VM_ENTRY_COUNT
+.endm
+.macro THOR_SECURITY_POST_VM_EXIT
+	incq %gs:THOR_GS_SECURITY_POST_VM_EXIT_COUNT
+.endm
+#else
 .macro THOR_SECURITY_PRE_VM_ENTRY
 .endm
 .macro THOR_SECURITY_POST_VM_EXIT
 .endm
+#endif
 
 .extern vmxUpdateHostRsp
 .global vmxVmRun

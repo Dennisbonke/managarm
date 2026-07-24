@@ -96,6 +96,8 @@ initgraph::Stage *getSecurityPolicyFrozenStage();
 //   VMRESUME, and VMRUN. postVmExit precedes generic VM-exit processing.
 // preIdle/postIdle: around HLT; postIdle runs after an interrupt returns from
 //   HLT, before the idle loop halts again.
+// nmiEntry/nmiReturn: NMI paths are counted independently in test builds,
+//   including nested NMIs; they remain action-free in production.
 enum class TransitionHook : uint8_t {
 	rawUserEntry,
 	trustedEntryState,
@@ -105,11 +107,22 @@ enum class TransitionHook : uint8_t {
 	preVmEntry,
 	postVmExit,
 	preIdle,
-	postIdle
+	postIdle,
+	nmiEntry,
+	nmiReturn,
+	numHooks
 };
 
+#if defined(THOR_SECURITY_TEST_HOOKS)
+// Test-only instrumentation is deliberately per CPU and does not dispatch
+// through a callback. Assembly hooks increment the matching GS-relative slot;
+// C++ hooks use this direct helper.
+void transitionHook(TransitionHook hook);
+uint64_t transitionHookCount(TransitionHook hook);
+#else
 inline void transitionHook(TransitionHook) {
 	asm volatile ("" : : : "memory");
 }
+#endif
 
 } // namespace thor::x86_security

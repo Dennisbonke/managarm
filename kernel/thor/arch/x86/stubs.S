@@ -41,7 +41,22 @@
 
 # Fixed production hook sites. They intentionally emit no mitigation action;
 # later evidence-backed modules replace only these fixed macros, never a runtime
-# callback in an entry path.
+# callback in an entry path. Test builds use per-CPU GS-relative counters, which
+# are safe at these sites and preserve the no-dispatch invariant.
+#ifdef THOR_SECURITY_TEST_HOOKS
+.macro THOR_SECURITY_RAW_USER_ENTRY
+	incq %gs:THOR_GS_SECURITY_RAW_USER_ENTRY_COUNT
+.endm
+.macro THOR_SECURITY_TRUSTED_ENTRY_STATE
+	incq %gs:THOR_GS_SECURITY_TRUSTED_ENTRY_STATE_COUNT
+.endm
+.macro THOR_SECURITY_USER_RETURN_PREPARATION
+	incq %gs:THOR_GS_SECURITY_USER_RETURN_PREPARATION_COUNT
+.endm
+.macro THOR_SECURITY_FINAL_USER_RETURN
+	incq %gs:THOR_GS_SECURITY_FINAL_USER_RETURN_COUNT
+.endm
+#else
 .macro THOR_SECURITY_RAW_USER_ENTRY
 .endm
 .macro THOR_SECURITY_TRUSTED_ENTRY_STATE
@@ -50,10 +65,7 @@
 .endm
 .macro THOR_SECURITY_FINAL_USER_RETURN
 .endm
-.macro THOR_SECURITY_NMI_ENTRY
-.endm
-.macro THOR_SECURITY_NMI_RETURN
-.endm
+#endif
 
 # ---------------------------------------------------------
 # Fault stubs
@@ -199,8 +211,8 @@
 	testl $3, 16(%rsp)
 	jz 1f
 	THOR_SECURITY_USER_RETURN_PREPARATION
-	swapgs
 	THOR_SECURITY_FINAL_USER_RETURN
+	swapgs
 1:
 
 	add $8, %rsp
@@ -293,8 +305,8 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 	testl $3, 16(%rsp)
 	jz 1f
 	THOR_SECURITY_USER_RETURN_PREPARATION
-	swapgs
 	THOR_SECURITY_FINAL_USER_RETURN
+	swapgs
 1:
 
 	add $8, %rsp
@@ -361,8 +373,8 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 	testl $3, 16(%rsp)
 	jz 1f
 	THOR_SECURITY_USER_RETURN_PREPARATION
-	swapgs
 	THOR_SECURITY_FINAL_USER_RETURN
+	swapgs
 1:
 
 	add $8, %rsp
@@ -427,8 +439,8 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 	testl $3, 16(%rsp)
 	jz 1f
 	THOR_SECURITY_USER_RETURN_PREPARATION
-	swapgs
 	THOR_SECURITY_FINAL_USER_RETURN
+	swapgs
 1:
 
 	add $8, %rsp
@@ -579,8 +591,8 @@ syscallStub:
 	mov 24(%rsp), %r11
 	mov 32(%rsp), %rsp
 
-	swapgs
 	THOR_SECURITY_FINAL_USER_RETURN
+	swapgs
 	sysretq
 
 .section .text.stubs
@@ -605,7 +617,6 @@ nmiStub:
 
 	# Reserve space for iplState.
 	sub $8, %rsp
-	THOR_SECURITY_NMI_ENTRY
 
 	mov %rsp, %rdi
 	mov 176(%rsp), %rsi
@@ -632,7 +643,6 @@ nmiStub:
 	pop %rbp
 
 	add $8, %rsp
-	THOR_SECURITY_NMI_RETURN
 	iretq
 
 # ---------------------------------------------------------

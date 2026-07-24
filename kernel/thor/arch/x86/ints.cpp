@@ -726,6 +726,7 @@ extern "C" void onPlatformNmi(NmiImageAccessor image, uint64_t expectedGs) {
 	// If we interrupted user space or a kernel stub, we might need to update GS.
 	auto gs = common::x86::rdmsr(common::x86::kMsrIndexGsBase);
 	common::x86::wrmsr(common::x86::kMsrIndexGsBase, expectedGs);
+	x86_security::transitionHook(x86_security::TransitionHook::nmiEntry);
 
 	iplSave(*image.iplState());
 	iplEnterContext(ipl::maximal, *image.iplState());
@@ -797,6 +798,7 @@ extern "C" void onPlatformNmi(NmiImageAccessor image, uint64_t expectedGs) {
 	iplLeaveContext(*image.iplState());
 
 	// Restore the old value of GS.
+	x86_security::transitionHook(x86_security::TransitionHook::nmiReturn);
 	common::x86::wrmsr(common::x86::kMsrIndexGsBase,
 			reinterpret_cast<uintptr_t>(gs));
 }
