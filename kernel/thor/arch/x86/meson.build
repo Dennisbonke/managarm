@@ -20,6 +20,7 @@ src += files(
 	'pmc-intel.cpp',
 	'pci_io.cpp',
 	'rtc.cpp',
+	'speculation-security.cpp',
 	'svm.cpp',
 	'system.cpp',
 	'vmx.cpp',

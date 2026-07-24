@@ -68,6 +68,9 @@ extern "C" void vmxUpdateHostRsp(thor::vmx::Vmcs* vm, uintptr_t rsp) {
 
 namespace thor::vmx {
 	bool vmxon() {
+		if(!getCpuData()->securityCapabilities.haveVmx)
+			return false;
+
 		infoLogger() << "vmx: enabling vmx" << frg::endlog;
 
 		auto vmxonRegion = physicalAllocator->allocate(kPageSize);

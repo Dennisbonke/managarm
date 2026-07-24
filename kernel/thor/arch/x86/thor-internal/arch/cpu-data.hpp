@@ -1,6 +1,7 @@
 #pragma once
 
 #include <thor-internal/arch/asm.h>
+#include <thor-internal/arch/speculation-security.hpp>
 #include <thor-internal/kernel-stack.hpp>
 #include <x86/tss.hpp>
 
@@ -36,6 +37,7 @@ struct PlatformCpuData : public AssemblyCpuData {
 	bool havePcids = false;
 	bool haveSmap = false;
 	bool haveVirtualization = false;
+	x86_security::CapabilitySnapshot securityCapabilities;
 };
 
 // Get a pointer to this CPU's PlatformCpuData instance.

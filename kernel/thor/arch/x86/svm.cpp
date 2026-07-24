@@ -10,7 +10,7 @@ extern "C" void svmVmRun(thor::svm::GprState *gprs, PhysicalAddr vmcb);
 
 namespace thor::svm {
 	bool init() {
-		if(!getGlobalCpuFeatures()->haveSvm)
+		if(!getCpuData()->securityCapabilities.haveSvm)
 			return false;
 
 		infoLogger() << "svm: Enabling SVM" << frg::endlog;

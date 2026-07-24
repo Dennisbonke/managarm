@@ -11,6 +11,7 @@
 #include <thor-internal/cpu-data.hpp>
 #include <thor-internal/ipl.hpp>
 #include <thor-internal/arch/pic.hpp>
+#include <thor-internal/arch/speculation-security.hpp>
 #include <x86/machine.hpp>
 
 namespace thor {
@@ -374,6 +375,7 @@ initgraph::Stage *getCpuFeaturesKnownStage() {
 }
 
 static initgraph::Task enumerateCpuFeaturesTask{&globalInitEngine, "x86.enumerate-cpu-features",
+	initgraph::Requires{x86_security::getSecurityPolicyFrozenStage()},
 	initgraph::Entails{getCpuFeaturesKnownStage()},
 	[] {
 		if(common::x86::cpuid(common::x86::kCpuIndexStructuredExtendedFeaturesEnum,1)[0] & common::x86::kCpuFred) {
@@ -561,6 +563,11 @@ static initgraph::Task initBootProcessorTask{&globalInitEngine, "x86.init-boot-p
 void initializeThisProcessor() {
 	auto cpuData = getCpuData();
 
+	// This is local discovery, not BSP feature inheritance. It must precede
+	// VMXON/SVME and ordinary scheduling on every processor.
+	x86_security::discoverThisCpuCapabilities();
+	x86_security::reconcileCpuCapabilities();
+
 	// Allocate per-CPU areas.
 	cpuData->dfStack = UniqueKernelStack::make();
 	cpuData->nmiStack = UniqueKernelStack::make();
@@ -747,10 +754,10 @@ void initializeThisProcessor() {
 	}
 
 	// Enable SVM or VMX if it is supported.
-	if(getGlobalCpuFeatures()->haveVmx)
+	if(getGlobalCpuFeatures()->haveVmx && cpuData->securityCapabilities.haveVmx)
 		cpuData->haveVirtualization = thor::vmx::vmxon();
 
-	if(getGlobalCpuFeatures()->haveSvm)
+	if(getGlobalCpuFeatures()->haveSvm && cpuData->securityCapabilities.haveSvm)
 		cpuData->haveVirtualization = thor::svm::init();
 
 	// Setup the per-CPU work queue.
