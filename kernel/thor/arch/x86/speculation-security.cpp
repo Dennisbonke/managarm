@@ -35,6 +35,17 @@ constexpr security::Evidence amdCpuid{
 		"STIBP, and SSBD controls; they do not establish vulnerability applicability."
 };
 
+constexpr const security::Evidence *x86EvidenceEntries[] = {
+		&intelCpuid,
+		&amdCpuid
+};
+constexpr security::EvidenceRegistry x86EvidenceRegistry{
+		x86EvidenceEntries, sizeof(x86EvidenceEntries) / sizeof(x86EvidenceEntries[0])
+};
+static_assert(x86EvidenceRegistry.count == 2);
+static_assert(x86EvidenceRegistry.at(0) == &intelCpuid);
+static_assert(x86EvidenceRegistry.at(1) == &amdCpuid);
+
 constexpr uint32_t bit(unsigned int n) {
 	return uint32_t{1} << n;
 }
@@ -118,6 +129,40 @@ constexpr CapabilitySnapshot incompatibleSynthetic{
 static_assert(controlsCompatible(compatibleSynthetic, compatibleSynthetic));
 static_assert(!controlsCompatible(compatibleSynthetic, incompatibleSynthetic));
 
+constexpr CapabilitySnapshot unprivilegedSynthetic{.observed = true};
+constexpr CapabilitySnapshot intelArchCapabilitiesSynthetic{
+	.observed = true,
+	.vendor = CpuVendor::intel,
+	.haveIbrs = true,
+	.haveIbpb = true,
+	.haveMdClear = true,
+	.haveArchCapabilities = true
+};
+constexpr CapabilitySnapshot amdArchCapabilitiesSynthetic{
+	.observed = true,
+	.vendor = CpuVendor::amd,
+	.haveArchCapabilities = true
+};
+constexpr CapabilitySnapshot virtualizedSynthetic{
+	.observed = true,
+	.vendor = CpuVendor::intel,
+	.hypervisorPresent = true,
+	.haveIbrs = true,
+	.haveIbpb = true
+};
+static_assert(!canReadArchCapabilities(unprivilegedSynthetic));
+static_assert(!canAccessSpeculationControl(unprivilegedSynthetic));
+static_assert(!canIssuePredictorBarrier(unprivilegedSynthetic));
+static_assert(!canClearCpuBuffers(unprivilegedSynthetic));
+static_assert(canReadArchCapabilities(intelArchCapabilitiesSynthetic));
+static_assert(canAccessSpeculationControl(intelArchCapabilitiesSynthetic));
+static_assert(canWriteIbrs(intelArchCapabilitiesSynthetic));
+static_assert(canIssuePredictorBarrier(intelArchCapabilitiesSynthetic));
+static_assert(canClearCpuBuffers(intelArchCapabilitiesSynthetic));
+static_assert(!canReadArchCapabilities(amdArchCapabilitiesSynthetic));
+static_assert(canIssuePredictorBarrier(virtualizedSynthetic));
+static_assert(!controlsCompatible(intelArchCapabilitiesSynthetic, virtualizedSynthetic));
+
 } // namespace
 
 const security::Evidence &intelCpuidEvidence() {
@@ -126,6 +171,10 @@ const security::Evidence &intelCpuidEvidence() {
 
 const security::Evidence &amdCpuidEvidence() {
 	return amdCpuid;
+}
+
+const security::EvidenceRegistry &evidenceRegistry() {
+	return x86EvidenceRegistry;
 }
 
 initgraph::Stage *getSecurityPolicyFrozenStage() {
@@ -196,7 +245,7 @@ void discoverThisCpuCapabilities() {
 
 	if(snapshot.vendor == CpuVendor::intel) {
 		snapshot.capabilityEvidence = &intelCpuid;
-		if(snapshot.haveArchCapabilities) {
+		if(canReadArchCapabilities(snapshot)) {
 			// CPUID.07H.00H:EDX[29] is the exact authorization predicate.
 			snapshot.archCapabilities = common::x86::rdmsr(0x10A);
 			snapshot.archCapabilitiesKnown = true;

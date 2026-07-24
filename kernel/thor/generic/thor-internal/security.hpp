@@ -110,6 +110,18 @@ struct Evidence {
 	const char *derivation;
 };
 
+// Architectures publish immutable, compiled-in evidence tables. A mitigation
+// module records a pointer to one of these entries in every decision instead of
+// relying on mutable documentation URLs or a model-number inference.
+struct EvidenceRegistry {
+	const Evidence *const *entries;
+	size_t count;
+
+	constexpr const Evidence *at(size_t index) const {
+		return index < count ? entries[index] : nullptr;
+	}
+};
+
 enum class MechanismRequest : uint8_t {
 	automatic,
 	forced,
