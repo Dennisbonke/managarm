@@ -72,6 +72,7 @@ src = files(
 	'generic/rcu.cpp',
 	'generic/service.cpp',
 	'generic/schedule.cpp',
+	'generic/security.cpp',
 	'generic/stream.cpp',
 	'generic/thread.cpp',
 	'generic/timer.cpp',
