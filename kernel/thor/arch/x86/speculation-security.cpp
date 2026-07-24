@@ -154,6 +154,9 @@ static initgraph::Task freezeSecurityPolicyTask{&globalInitEngine, "x86.freeze-s
 			panicLogger() << "thor: invalid speculation_security command-line policy: "
 					<< static_cast<unsigned int>(error) << frg::endlog;
 		state.freezePolicy();
+		if(!state.publishDeferredBoundaryRecords())
+			panicLogger() << "thor: failed to publish deferred security boundary records"
+					<< frg::endlog;
 	}};
 
 void discoverThisCpuCapabilities() {
@@ -214,14 +217,12 @@ void discoverThisCpuCapabilities() {
 
 void reconcileCpuCapabilities() {
 	CapabilitySnapshot *baseline = nullptr;
-	size_t observed = 0;
 	bool mismatch = false;
 
 	for(size_t i = 0; i < getCpuCount(); ++i) {
 		auto &snapshot = getCpuData(i)->securityCapabilities;
 		if(!snapshot.observed)
 			continue;
-		++observed;
 		if(!baseline)
 			baseline = &snapshot;
 	}
@@ -239,8 +240,12 @@ void reconcileCpuCapabilities() {
 	if(mismatch)
 		infoLogger() << "thor: security capability mismatch; incompatible CPUs are excluded "
 				"from speculation-control eligible sets" << frg::endlog;
-	if(observed == getCpuCount())
+	if(cpuCapabilitySetFinalized()) {
 		debugLogger() << "thor: security capability CPU-set reconciliation complete" << frg::endlog;
+		if(!security::architectureState().publishUnmitigatedBoundaryRecords())
+			panicLogger() << "thor: failed to publish initial security boundary records"
+					<< frg::endlog;
+	}
 }
 
 bool cpuCapabilitySetFinalized() {

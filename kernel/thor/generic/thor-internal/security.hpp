@@ -377,6 +377,14 @@ constexpr BoundaryDecision aggregateBoundary(TrustBoundary boundary,
 	return {boundary, Result::protectedResult, Reason::enforcementEnabled, policy};
 }
 
+// A permissive boundary records its status without denying execution. A
+// required boundary is usable only after an auditable protected decision has
+// been published.
+constexpr bool canActivateBoundary(const BoundaryDecision &decision) {
+	return decision.policy.requirement == BoundaryRequirement::permissive
+			|| decision.result == Result::protectedResult;
+}
+
 class ArchitectureState {
 public:
 	constexpr Policy &policy() {
@@ -391,8 +399,57 @@ public:
 		policy_.freeze();
 	}
 
+	// Records are published only after policy freeze and only once. This keeps a
+	// finalized protected boundary from being silently weakened by a later CPU
+	// observation; a future CPU-hotplug policy must decide whether to exclude the
+	// CPU or refuse the dependent facility before publication.
+	constexpr bool publishBoundaryDecision(BoundaryDecision decision) {
+		if(!policy_.frozen())
+			return false;
+		auto index = static_cast<size_t>(decision.boundary);
+		if(boundaryPublished_[index])
+			return false;
+		if(decision.policy.requirement != policy_.boundary(decision.boundary).requirement
+				|| decision.policy.source != policy_.boundary(decision.boundary).source)
+			return false;
+		boundaryDecisions_[index] = decision;
+		boundaryPublished_[index] = true;
+		return true;
+	}
+
+	constexpr const BoundaryDecision *boundaryDecision(TrustBoundary boundary) const {
+		auto index = static_cast<size_t>(boundary);
+		return boundaryPublished_[index] ? &boundaryDecisions_[index] : nullptr;
+	}
+
+	// SMT topology/isolation is explicitly deferred, so its status is final
+	// independently of processor capability discovery.
+	constexpr bool publishDeferredBoundaryRecords() {
+		auto boundary = TrustBoundary::smtSibling;
+		return publishBoundaryDecision(aggregateBoundary(boundary, nullptr, 0,
+				policy_.boundary(boundary)));
+	}
+
+	// The foundation has no mitigation modules yet. Once every CPU capability
+	// snapshot is known, publish explicit unknown records for all other
+	// permissive boundaries instead of leaving them absent. Later mitigation
+	// modules replace this finalization step with their aggregate decisions.
+	constexpr bool publishUnmitigatedBoundaryRecords() {
+		for(size_t i = 0; i < numTrustBoundaries; ++i) {
+			auto boundary = static_cast<TrustBoundary>(i);
+			if(boundary == TrustBoundary::smtSibling)
+				continue;
+			if(!publishBoundaryDecision(aggregateBoundary(boundary, nullptr, 0,
+						policy_.boundary(boundary))))
+				return false;
+		}
+		return true;
+	}
+
 private:
 	Policy policy_{};
+	frg::array<BoundaryDecision, numTrustBoundaries> boundaryDecisions_{};
+	frg::array<bool, numTrustBoundaries> boundaryPublished_{};
 };
 
 ArchitectureState &architectureState();
