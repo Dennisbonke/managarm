@@ -24,6 +24,17 @@ inline constexpr size_t numTrustBoundaries = static_cast<size_t>(TrustBoundary::
 using SecurityDomain = uint64_t;
 inline constexpr SecurityDomain kernelDomain = 0;
 
+// Domain identities are opaque at the shared layer. A caller can use the
+// stable address of its owning object when no separately allocated ID exists;
+// null deliberately remains the kernel domain.
+inline SecurityDomain domainForIdentity(const void *identity) {
+	return reinterpret_cast<uintptr_t>(identity);
+}
+
+constexpr bool isDomainChange(SecurityDomain previous, SecurityDomain next) {
+	return previous != next;
+}
+
 enum class Transition : uint8_t {
 	lessTrustedToMoreTrusted,
 	moreTrustedToLessTrusted,

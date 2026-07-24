@@ -11,6 +11,7 @@
 #include <thor-internal/types.hpp>
 #include <thor-internal/error.hpp>
 #include <thor-internal/kernel-stack.hpp>
+#include <thor-internal/security.hpp>
 #include <initgraph.hpp>
 
 #include <thor-internal/arch-generic/asid.hpp>
@@ -270,6 +271,14 @@ public:
 		return _uar;
 	}
 
+	security::SecurityDomain securityDomain() const {
+		return _securityDomain;
+	}
+
+	void setSecurityDomain(security::SecurityDomain domain) {
+		_securityDomain = domain;
+	}
+
 private:
 	// Private function only used for the static_assert check.
 	//
@@ -284,6 +293,7 @@ private:
 	char *_pointer;
 	void *_exceptionStack;
 	UserAccessRegion *_uar{nullptr};
+	security::SecurityDomain _securityDomain{security::kernelDomain};
 };
 
 // Determine whether this address belongs to the higher half.

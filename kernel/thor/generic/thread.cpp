@@ -8,6 +8,7 @@
 #include <thor-internal/cpu-data.hpp>
 #include <thor-internal/load-balancing.hpp>
 #include <thor-internal/kasan.hpp>
+#include <thor-internal/security.hpp>
 #include <thor-internal/stream.hpp>
 #include <thor-internal/thread.hpp>
 #include <thor-internal/timer.hpp>
@@ -588,6 +589,12 @@ Thread::Thread(CtorToken, smarter::shared_ptr<Universe> universe,
 		_executor{&_userContext, &Thread::launchCurrent_},
 		intrImage_{&_userContext, abi},
 		_universe{std::move(universe)}, _addressSpace{std::move(address_space)} {
+	// Address spaces are the current process-level ownership object. Threads
+	// sharing one receive the same opaque domain; a future domain subsystem can
+	// replace this assignment without changing the transition contract.
+	auto domain = security::domainForIdentity(_addressSpace.get());
+	_executor.setSecurityDomain(domain);
+	intrImage_.setSecurityDomain(domain);
 	_lastRunTimeUpdate = getClockNanos();
 	// TODO: Alternatively, we could add a separate observation for new launched threads.
 	intrState_ = IntrState::inInterrupt;

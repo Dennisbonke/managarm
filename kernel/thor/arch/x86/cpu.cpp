@@ -243,7 +243,12 @@ extern "C" [[ noreturn ]] void _restoreExecutorRegisters(void *pointer);
 extern "C" bool thorFredEnabled;
 
 [[ gnu::section(".text.stubs") ]] void restoreExecutor(Executor *executor) {
-	x86_security::transitionHook(x86_security::TransitionHook::contextChange);
+	// A context switch is a security transition only when its assigned domains
+	// differ. Address-space owners assign domains below; fibers remain in the
+	// kernel domain until a later subsystem gives them another identity.
+	if(auto previous = getCpuData()->activeExecutor;
+			previous && security::isDomainChange(previous->securityDomain(), executor->securityDomain()))
+		x86_security::transitionHook(x86_security::TransitionHook::contextChange);
 
 	if(executor->_tss) {
 		activateTss(executor->_tss);

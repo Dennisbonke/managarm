@@ -1,6 +1,7 @@
 #pragma once
 
 #include <thor-internal/arch/cpu.hpp>
+#include <thor-internal/security.hpp>
 
 #include <concepts>
 
@@ -88,6 +89,8 @@ concept ValidExecutor = requires(T *ex,
 	{ ex->arg1() } -> std::same_as<Word *>;
 	{ ex->result0() } -> std::same_as<Word *>;
 	{ ex->result1() } -> std::same_as<Word *>;
+	{ ex->securityDomain() } -> std::same_as<security::SecurityDomain>;
+	{ ex->setSecurityDomain(security::kernelDomain) } -> std::same_as<void>;
 	// Save/restore
 	{ saveExecutor(ex, f) } -> std::same_as<void>;
 	{ saveExecutor(ex, i) } -> std::same_as<void>;
