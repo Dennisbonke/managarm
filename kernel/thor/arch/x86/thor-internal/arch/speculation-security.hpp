@@ -77,4 +77,39 @@ const security::Evidence &amdCpuidEvidence();
 
 initgraph::Stage *getSecurityPolicyFrozenStage();
 
+// Fixed transition-hook phases. Production hooks are compiler barriers only;
+// they never dispatch dynamically and never select a mitigation action.
+//
+// rawUserEntry: legacy IDT/SYSCALL or FRED ring-3 entry, before untrusted state
+//   is consumed beyond the architectural entry frame. Stack/address-space may
+//   still be user controlled; GS/per-CPU access is not assumed.
+// trustedEntryState: after the entry path established its kernel frame and
+//   stack. Interrupt state and NMI nesting remain owned by that path.
+// userReturnPreparation: registers and return state are prepared while the
+//   kernel stack and kernel GS are still valid.
+// finalUserReturn: immediately before IRET/SYSRET/ERETU after all state needed
+//   by the return instruction is established.
+// contextChange: scheduler/executor handoff; not every context switch is a
+//   security-domain change. Future domain assignment calls this phase only when
+//   the identities differ.
+// preVmEntry/postVmExit: fixed assembly sites immediately around VMLAUNCH,
+//   VMRESUME, and VMRUN. postVmExit precedes generic VM-exit processing.
+// preIdle/postIdle: around HLT; postIdle runs after an interrupt returns from
+//   HLT, before the idle loop halts again.
+enum class TransitionHook : uint8_t {
+	rawUserEntry,
+	trustedEntryState,
+	userReturnPreparation,
+	finalUserReturn,
+	contextChange,
+	preVmEntry,
+	postVmExit,
+	preIdle,
+	postIdle
+};
+
+inline void transitionHook(TransitionHook) {
+	asm volatile ("" : : : "memory");
+}
+
 } // namespace thor::x86_security

@@ -39,6 +39,22 @@
 # Emit debugging information + unwind tables.
 .cfi_sections .eh_frame, .debug_frame
 
+# Fixed production hook sites. They intentionally emit no mitigation action;
+# later evidence-backed modules replace only these fixed macros, never a runtime
+# callback in an entry path.
+.macro THOR_SECURITY_RAW_USER_ENTRY
+.endm
+.macro THOR_SECURITY_TRUSTED_ENTRY_STATE
+.endm
+.macro THOR_SECURITY_USER_RETURN_PREPARATION
+.endm
+.macro THOR_SECURITY_FINAL_USER_RETURN
+.endm
+.macro THOR_SECURITY_NMI_ENTRY
+.endm
+.macro THOR_SECURITY_NMI_RETURN
+.endm
+
 # ---------------------------------------------------------
 # Fault stubs
 # ---------------------------------------------------------
@@ -70,6 +86,7 @@
 	testl $3, 16(%rsp)
 	jz 1f
 	swapgs
+	THOR_SECURITY_RAW_USER_ENTRY
 1:
 
 	push %rbp
@@ -120,6 +137,7 @@
 
 	# Reserve space for iplState.
 	sub $8, %rsp
+	THOR_SECURITY_TRUSTED_ENTRY_STATE
 	.cfi_adjust_cfa_offset 8
 
 	mov %rsp, %rdi
@@ -180,7 +198,9 @@
 	# Restore GS.
 	testl $3, 16(%rsp)
 	jz 1f
+	THOR_SECURITY_USER_RETURN_PREPARATION
 	swapgs
+	THOR_SECURITY_FINAL_USER_RETURN
 1:
 
 	add $8, %rsp
@@ -221,6 +241,7 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 	testl $3, 8(%rsp)
 	jz 1f
 	swapgs
+	THOR_SECURITY_RAW_USER_ENTRY
 1:
 
 	push $0 # Dummy error code.
@@ -242,6 +263,7 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 
 	# Reserve space for iplState.
 	sub $8, %rsp
+	THOR_SECURITY_TRUSTED_ENTRY_STATE
 
 	mov %rsp, %rdi
 	mov $\number, %rsi
@@ -270,7 +292,9 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 	# Restore GS.
 	testl $3, 16(%rsp)
 	jz 1f
+	THOR_SECURITY_USER_RETURN_PREPARATION
 	swapgs
+	THOR_SECURITY_FINAL_USER_RETURN
 1:
 
 	add $8, %rsp
@@ -285,6 +309,7 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 	testl $3, 8(%rsp)
 	jz 1f
 	swapgs
+	THOR_SECURITY_RAW_USER_ENTRY
 1:
 
 	push $0 # Dummy error code.
@@ -306,6 +331,7 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 
 	# Reserve space for iplState.
 	sub $8, %rsp
+	THOR_SECURITY_TRUSTED_ENTRY_STATE
 
 	mov %rsp, %rdi
 	mov $\number, %rsi
@@ -334,7 +360,9 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 	# Restore GS.
 	testl $3, 16(%rsp)
 	jz 1f
+	THOR_SECURITY_USER_RETURN_PREPARATION
 	swapgs
+	THOR_SECURITY_FINAL_USER_RETURN
 1:
 
 	add $8, %rsp
@@ -349,6 +377,7 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 	testl $3, 8(%rsp)
 	jz 1f
 	swapgs
+	THOR_SECURITY_RAW_USER_ENTRY
 1:
 
 	push $0 # Dummy error code.
@@ -370,6 +399,7 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 
 	# Reserve space for iplState.
 	sub $8, %rsp
+	THOR_SECURITY_TRUSTED_ENTRY_STATE
 
 	mov %rsp, %rdi
 	cld
@@ -396,7 +426,9 @@ MAKE_FAULT_STUB .L_typeFaultNoCode, faultStubSimdException, 19
 	# Restore GS.
 	testl $3, 16(%rsp)
 	jz 1f
+	THOR_SECURITY_USER_RETURN_PREPARATION
 	swapgs
+	THOR_SECURITY_FINAL_USER_RETURN
 1:
 
 	add $8, %rsp
@@ -486,6 +518,7 @@ syscallStub:
 	# rsp still contains the user-space stack pointer
 	# temporarily save it and switch to kernel-stack
 	swapgs
+	THOR_SECURITY_RAW_USER_ENTRY
 	mov %rsp, %rbx
 	mov %gs:THOR_GS_SYSCALL_STACK, %rsp
 
@@ -516,6 +549,7 @@ syscallStub:
 
 	# Skip rbx, rcx, r11, iplState.
 	sub $32, %rsp
+	THOR_SECURITY_TRUSTED_ENTRY_STATE
 
 	mov %rsp, %rdi
 	xor %ebp, %ebp
@@ -540,11 +574,13 @@ syscallStub:
 	pop %rbp
 
 	# Load rip, rflags, user rsp from the iret frame.
+	THOR_SECURITY_USER_RETURN_PREPARATION
 	mov 8(%rsp), %rcx
 	mov 24(%rsp), %r11
 	mov 32(%rsp), %rsp
 
 	swapgs
+	THOR_SECURITY_FINAL_USER_RETURN
 	sysretq
 
 .section .text.stubs
@@ -569,6 +605,7 @@ nmiStub:
 
 	# Reserve space for iplState.
 	sub $8, %rsp
+	THOR_SECURITY_NMI_ENTRY
 
 	mov %rsp, %rdi
 	mov 176(%rsp), %rsi
@@ -595,6 +632,7 @@ nmiStub:
 	pop %rbp
 
 	add $8, %rsp
+	THOR_SECURITY_NMI_RETURN
 	iretq
 
 # ---------------------------------------------------------
@@ -687,6 +725,7 @@ _restoreExecutorRegisters:
 	testb $3, .L_imageCs(%rdi)
 	mov .L_imageRdi(%rdi), %rdi
 	jz .L_erets
+	THOR_SECURITY_FINAL_USER_RETURN
 	eretu
 .L_erets:
 	erets
@@ -700,6 +739,7 @@ _restoreExecutorRegisters:
 .align 4096
 
 thorFredRing3Entry:
+	THOR_SECURITY_RAW_USER_ENTRY
 	push %rbp
 	push %r15
 	push %r14
@@ -718,6 +758,7 @@ thorFredRing3Entry:
 
 	# Reserve space for iplState.
 	sub $8, %rsp
+	THOR_SECURITY_TRUSTED_ENTRY_STATE
 
 	mov %rsp, %rdi
 	xor %ebp, %ebp
@@ -741,6 +782,8 @@ thorFredRing3Entry:
 	pop %r14
 	pop %r15
 	pop %rbp
+	THOR_SECURITY_USER_RETURN_PREPARATION
+	THOR_SECURITY_FINAL_USER_RETURN
 	eretu
 
 .fill 256 - (. - thorFredRing3Entry), 1, 0
@@ -764,6 +807,7 @@ thorFredRing0Entry:
 
 	# Reserve space for iplState.
 	sub $8, %rsp
+	THOR_SECURITY_TRUSTED_ENTRY_STATE
 
 	mov %rsp, %rdi
 	xor %ebp, %ebp

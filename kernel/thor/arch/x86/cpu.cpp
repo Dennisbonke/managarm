@@ -243,6 +243,8 @@ extern "C" [[ noreturn ]] void _restoreExecutorRegisters(void *pointer);
 extern "C" bool thorFredEnabled;
 
 [[ gnu::section(".text.stubs") ]] void restoreExecutor(Executor *executor) {
+	x86_security::transitionHook(x86_security::TransitionHook::contextChange);
+
 	if(executor->_tss) {
 		activateTss(executor->_tss);
 	}else{
@@ -270,8 +272,11 @@ extern "C" bool thorFredEnabled;
 
 	uint16_t cs = executor->general()->cs;
 	assert(cs == kSelKernelCode || cs == kSelUserCode);
-	if(cs == kSelUserCode && !thorFredEnabled)
-		asm volatile ( "swapgs" : : : "memory" );
+	if(cs == kSelUserCode) {
+		x86_security::transitionHook(x86_security::TransitionHook::userReturnPreparation);
+		if(!thorFredEnabled)
+			asm volatile ( "swapgs" : : : "memory" );
+	}
 
 	_restoreExecutorRegisters(executor->general());
 }

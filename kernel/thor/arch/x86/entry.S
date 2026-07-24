@@ -1,4 +1,8 @@
 .text
+.macro THOR_SECURITY_PRE_IDLE
+.endm
+.macro THOR_SECURITY_POST_IDLE
+.endm
 .global thorRtEntry
 thorRtEntry:
 	# enable SSE support
@@ -22,7 +26,9 @@ thorRtEntry:
 enableIntsAndHaltForever:
 	sti
 halt_loop:
+	THOR_SECURITY_PRE_IDLE
 	hlt
+	THOR_SECURITY_POST_IDLE
 	jmp halt_loop
 
 	.section .note.GNU-stack,"",%progbits

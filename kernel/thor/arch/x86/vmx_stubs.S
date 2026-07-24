@@ -3,6 +3,10 @@
 
 
 .section .text
+.macro THOR_SECURITY_PRE_VM_ENTRY
+.endm
+.macro THOR_SECURITY_POST_VM_EXIT
+.endm
 
 .extern vmxUpdateHostRsp
 .global vmxVmRun
@@ -45,13 +49,16 @@ vmxVmRun: # rdi: thor::vmx::Vmcs* vm, rsi: Guest GPR State, rdx: launched
 	
 	je 1f
 
+	THOR_SECURITY_PRE_VM_ENTRY
 	vmlaunch
 	jmp vmxDoVmExit # When vmlaunch errors it doesn't go to HOST_RIP (vmxDoVmExit), so we have to nudge it
 
 1:
+	THOR_SECURITY_PRE_VM_ENTRY
 	vmresume
 
 vmxDoVmExit:
+	THOR_SECURITY_POST_VM_EXIT
 	pushq %rdi;
 	movq 8(%rsp), %rdi;
 	movq %rax, (%rdi);

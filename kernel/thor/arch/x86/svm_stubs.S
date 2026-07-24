@@ -1,4 +1,8 @@
 .section .text
+.macro THOR_SECURITY_PRE_VM_ENTRY
+.endm
+.macro THOR_SECURITY_POST_VM_EXIT
+.endm
 
 .global svmVmRun
 svmVmRun:
@@ -53,7 +57,9 @@ svmVmRun:
 	movq 0x8(%rsp), %rax
 
 	vmload %rax
+	THOR_SECURITY_PRE_VM_ENTRY
 	vmrun %rax
+	THOR_SECURITY_POST_VM_EXIT
 	vmsave %rax
 
 	pushq %rdi # Save Guest RDI

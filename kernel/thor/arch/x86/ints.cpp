@@ -11,6 +11,7 @@
 #include <thor-internal/arch/stack.hpp>
 #include <thor-internal/arch/system.hpp>
 #include <thor-internal/arch/pic.hpp>
+#include <thor-internal/arch/speculation-security.hpp>
 
 extern char stubsPtr[], stubsLimit[];
 
@@ -885,8 +886,8 @@ extern "C" void enableIntsAndHaltForever();
 
 void suspendSelf() {
 	assert(!intsAreEnabled());
+	x86_security::transitionHook(x86_security::TransitionHook::preIdle);
 	enableIntsAndHaltForever();
 }
 
 } // namespace thor
-
