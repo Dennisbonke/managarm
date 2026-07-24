@@ -100,6 +100,13 @@ kasan = get_option('kernel_kasan')
 ubsan = get_option('kernel_ubsan')
 log_alloc = get_option('kernel_log_allocations')
 frame_pointers = get_option('kernel_frame_pointers')
+security_test_hooks = get_option('kernel_security_test_hooks')
+
+if security_test_hooks
+	# This reaches both C++ and preprocessed assembly so a test build observes
+	# exactly the fixed hook sites that production uses.
+	add_project_arguments('-DTHOR_SECURITY_TEST_HOOKS', language: ['c', 'cpp'])
+endif
 
 supported_archs = [
 	'aarch64',

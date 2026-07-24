@@ -1,8 +1,19 @@
+#include <thor-internal/arch/asm.h>
+
 .text
+#ifdef THOR_SECURITY_TEST_HOOKS
+.macro THOR_SECURITY_PRE_IDLE
+	incq %gs:THOR_GS_SECURITY_PRE_IDLE_COUNT
+.endm
+.macro THOR_SECURITY_POST_IDLE
+	incq %gs:THOR_GS_SECURITY_POST_IDLE_COUNT
+.endm
+#else
 .macro THOR_SECURITY_PRE_IDLE
 .endm
 .macro THOR_SECURITY_POST_IDLE
 .endm
+#endif
 .global thorRtEntry
 thorRtEntry:
 	# enable SSE support

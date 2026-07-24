@@ -57,3 +57,9 @@ option('kernel_frame_pointers',
     value : false,
     description : 'include frame pointers for stack traces'
 )
+
+option('kernel_security_test_hooks',
+    type : 'boolean',
+    value : false,
+    description : 'instrument fixed CPU-security transition hooks in test builds'
+)
