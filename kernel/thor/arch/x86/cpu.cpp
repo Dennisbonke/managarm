@@ -246,9 +246,14 @@ extern "C" bool thorFredEnabled;
 	// A context switch is a security transition only when its assigned domains
 	// differ. Address-space owners assign domains below; fibers remain in the
 	// kernel domain until a later subsystem gives them another identity.
-	if(auto previous = getCpuData()->activeExecutor;
-			previous && security::isDomainChange(previous->securityDomain(), executor->securityDomain()))
-		x86_security::transitionHook(x86_security::TransitionHook::contextChange);
+	if(auto previous = getCpuData()->activeExecutor; previous) {
+		if(security::isDomainChange(previous->securityDomain(), executor->securityDomain()))
+			x86_security::transitionHook(x86_security::TransitionHook::contextChange);
+		auto scope = previous->transitionScope() == security::TransitionScope::userProcess
+				&& executor->transitionScope() == security::TransitionScope::userProcess
+			? security::TransitionScope::userProcess : security::TransitionScope::kernel;
+		x86_security::handleIbpbTransition({previous->securityDomain(), executor->securityDomain(), scope});
+	}
 
 	if(executor->_tss) {
 		activateTss(executor->_tss);

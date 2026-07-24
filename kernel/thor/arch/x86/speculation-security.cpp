@@ -1,5 +1,6 @@
 #include <thor-internal/arch/speculation-security.hpp>
 
+#include <thor-internal/arch/speculation-mechanisms.hpp>
 #include <thor-internal/cpu-data.hpp>
 #include <thor-internal/debug.hpp>
 #include <thor-internal/main.hpp>
@@ -35,16 +36,31 @@ constexpr security::Evidence amdCpuid{
 		"STIBP, and SSBD controls; they do not establish vulnerability applicability."
 };
 
+constexpr security::Evidence ibpbMechanismEvidence{
+		"x86.ibpb.mechanism.2026",
+		security::Vendor::unknown,
+		"Intel 325462; AMD 24593",
+		"x86 IBPB mechanism authorization",
+		"Intel 092 (June 2026); AMD 3.44 (March 2026)",
+		"Intel CPUID.07H.0:EDX[26] and IA32_PRED_CMD; AMD Speculation Control",
+		"",
+		"",
+		"CPUID authorizes the local predictor-barrier mechanism but no affected-CPU "
+		"predicate is provided by this module."
+};
+
 constexpr const security::Evidence *x86EvidenceEntries[] = {
 		&intelCpuid,
-		&amdCpuid
+		&amdCpuid,
+		&ibpbMechanismEvidence
 };
 constexpr security::EvidenceRegistry x86EvidenceRegistry{
 		x86EvidenceEntries, sizeof(x86EvidenceEntries) / sizeof(x86EvidenceEntries[0])
 };
-static_assert(x86EvidenceRegistry.count == 2);
+static_assert(x86EvidenceRegistry.count == 3);
 static_assert(x86EvidenceRegistry.at(0) == &intelCpuid);
 static_assert(x86EvidenceRegistry.at(1) == &amdCpuid);
+static_assert(x86EvidenceRegistry.at(2) == &ibpbMechanismEvidence);
 
 constexpr uint32_t bit(unsigned int n) {
 	return uint32_t{1} << n;
@@ -163,6 +179,93 @@ static_assert(!canReadArchCapabilities(amdArchCapabilitiesSynthetic));
 static_assert(canIssuePredictorBarrier(virtualizedSynthetic));
 static_assert(!controlsCompatible(intelArchCapabilitiesSynthetic, virtualizedSynthetic));
 
+constexpr security::TransitionDescriptor sameUserDomain{
+		1, 1, security::TransitionScope::userProcess
+};
+constexpr security::TransitionDescriptor differentUserDomains{
+		1, 2, security::TransitionScope::userProcess
+};
+constexpr security::TransitionDescriptor kernelToUser{
+		security::kernelDomain, 1, security::TransitionScope::kernel
+};
+constexpr security::TransitionDescriptor kernelToKernel{
+		security::kernelDomain, security::kernelDomain, security::TransitionScope::kernel
+};
+constexpr security::TransitionDescriptor vmTransition{1, 2, security::TransitionScope::vm};
+constexpr security::TransitionDescriptor idleTransition{1, 2, security::TransitionScope::idle};
+constexpr security::TransitionDescriptor nmiTransition{1, 2, security::TransitionScope::nmi};
+static_assert(!security::isIbpbRelevantTransition(sameUserDomain));
+static_assert(security::isIbpbRelevantTransition(differentUserDomains));
+static_assert(!security::isIbpbRelevantTransition(kernelToUser));
+static_assert(!security::isIbpbRelevantTransition(kernelToKernel));
+static_assert(!security::isIbpbRelevantTransition(vmTransition));
+static_assert(!security::isIbpbRelevantTransition(idleTransition));
+static_assert(!security::isIbpbRelevantTransition(nmiTransition));
+static_assert(classifyIbpbTransition(differentUserDomains,
+		{security::MechanismRequest::automatic, security::PolicySource::defaultValue},
+		intelArchCapabilitiesSynthetic)
+			== IbpbTransitionOutcome::inactivePendingApplicabilityEvidence);
+static_assert(classifyIbpbTransition(differentUserDomains,
+		{security::MechanismRequest::disabled, security::PolicySource::commandLine},
+		intelArchCapabilitiesSynthetic) == IbpbTransitionOutcome::disabledByPolicy);
+static_assert(classifyIbpbTransition(differentUserDomains,
+		{security::MechanismRequest::forced, security::PolicySource::commandLine},
+		unprivilegedSynthetic) == IbpbTransitionOutcome::unavailableOnCpu);
+static_assert(classifyIbpbTransition(differentUserDomains,
+		{security::MechanismRequest::forced, security::PolicySource::commandLine},
+		intelArchCapabilitiesSynthetic) == IbpbTransitionOutcome::invoked);
+
+constexpr security::MitigationDecision ibpbRegistrationTestDecision(
+		security::BoundaryPolicy boundaryPolicy) {
+	return security::deriveDecision({security::Applicability::unknown,
+		security::MechanismAvailability::available, security::Enforcement::enabled,
+		{security::MechanismRequest::forced, security::PolicySource::commandLine},
+		boundaryPolicy, &ibpbMechanismEvidence});
+}
+
+constexpr bool testIbpbDecisionRegistration() {
+	security::ArchitectureState state;
+	if(!state.registerMitigation(security::TrustBoundary::processToProcess,
+				&ibpbRegistrationTestDecision))
+		return false;
+	state.freezePolicy();
+	if(!state.publishDeferredBoundaryRecords() || !state.finalizeBoundaryRecords())
+		return false;
+	auto permissive = state.boundaryDecision(security::TrustBoundary::processToProcess);
+	return permissive && permissive->result == security::Result::unknown
+			&& permissive->reason == security::Reason::unknownApplicability;
+}
+static_assert(testIbpbDecisionRegistration());
+
+constexpr bool testRequiredIbpbBoundaryUnavailable() {
+	security::ArchitectureState state;
+	if(!state.policy().setBoundary(security::TrustBoundary::processToProcess,
+			{security::BoundaryRequirement::required, security::PolicySource::commandLine}))
+		return false;
+	if(!state.registerMitigation(security::TrustBoundary::processToProcess,
+				&ibpbRegistrationTestDecision))
+		return false;
+	state.freezePolicy();
+	if(!state.publishDeferredBoundaryRecords() || !state.finalizeBoundaryRecords())
+		return false;
+	auto decision = state.boundaryDecision(security::TrustBoundary::processToProcess);
+	return decision && decision->result == security::Result::unavailable
+			&& decision->reason == security::Reason::requiredBoundaryUnavailable
+			&& !security::canActivateBoundary(*decision);
+}
+static_assert(testRequiredIbpbBoundaryUnavailable());
+
+constexpr bool testIbpbPolicyFreeze() {
+	IbpbPolicy policy;
+	if(!policy.set({security::MechanismRequest::automatic,
+			security::PolicySource::defaultValue}))
+		return false;
+	policy.freeze();
+	return !policy.set({security::MechanismRequest::forced,
+		security::PolicySource::commandLine});
+}
+static_assert(testIbpbPolicyFreeze());
+
 } // namespace
 
 const security::Evidence &intelCpuidEvidence() {
@@ -180,6 +283,98 @@ const security::EvidenceRegistry &evidenceRegistry() {
 initgraph::Stage *getSecurityPolicyFrozenStage() {
 	static initgraph::Stage stage{&globalInitEngine, "x86.security-policy-frozen"};
 	return &stage;
+}
+
+IbpbPolicy &ibpbPolicy() {
+	static IbpbPolicy policy;
+	return policy;
+}
+
+security::PolicyParseError configureIbpbPolicy(frg::string_view commandLine,
+		security::MitigationPolicy inherited) {
+	auto &policy = ibpbPolicy();
+	if(policy.frozen())
+		return security::PolicyParseError::conflictingOption;
+	constexpr char ibpb[] = "ibpb";
+	auto configured = inherited;
+	auto error = security::parseMitigationPolicy(commandLine,
+			{ibpb, sizeof(ibpb) - 1}, configured);
+	if(error != security::PolicyParseError::success)
+		return error;
+	return policy.set(configured) ? security::PolicyParseError::success
+			: security::PolicyParseError::conflictingOption;
+}
+
+security::MitigationDecision ibpbMitigationDecision(security::BoundaryPolicy boundaryPolicy) {
+	bool allAvailable = getCpuCount() != 0;
+	for(size_t i = 0; i < getCpuCount(); ++i) {
+		auto &snapshot = getCpuData(i)->securityCapabilities;
+		allAvailable &= snapshot.observed && canIssuePredictorBarrier(snapshot);
+	}
+	auto mechanism = allAvailable ? security::MechanismAvailability::available
+			: security::MechanismAvailability::unavailable;
+	auto policy = ibpbPolicy().policy();
+	auto enforcement = policy.request == security::MechanismRequest::disabled
+			? security::Enforcement::disabledByPolicy : security::Enforcement::notAttempted;
+	return security::deriveDecision({security::Applicability::unknown, mechanism, enforcement,
+			policy, boundaryPolicy, &ibpbMechanismEvidence});
+}
+
+#if defined(THOR_SECURITY_TEST_HOOKS)
+namespace {
+PredictorBarrierInvoker predictorBarrierInvokerForTest{nullptr};
+}
+
+PredictorBarrierInvoker setPredictorBarrierInvokerForTest(PredictorBarrierInvoker invoker) {
+	auto previous = predictorBarrierInvokerForTest;
+	predictorBarrierInvokerForTest = invoker;
+	return previous;
+}
+
+uint64_t ibpbAttemptCount() {
+	return __atomic_load_n(&getCpuData()->securityIbpbAttemptCount, __ATOMIC_RELAXED);
+}
+
+uint64_t ibpbCompletedCount() {
+	return __atomic_load_n(&getCpuData()->securityIbpbCompletedCount, __ATOMIC_RELAXED);
+}
+#endif
+
+void handleIbpbTransition(const security::TransitionDescriptor &transition) {
+	auto outcome = classifyIbpbTransition(transition, ibpbPolicy().policy(),
+		getCpuData()->securityCapabilities);
+	if(outcome != IbpbTransitionOutcome::invoked)
+		return;
+
+	if constexpr(collectIbpbEvents)
+		__atomic_fetch_add(&getCpuData()->securityIbpbAttemptCount, uint64_t{1}, __ATOMIC_RELAXED);
+
+#if defined(THOR_SECURITY_TEST_HOOKS)
+	auto completed = predictorBarrierInvokerForTest
+			? predictorBarrierInvokerForTest() : issuePredictorBarrier();
+	if constexpr(collectIbpbEvents)
+		if(completed)
+			__atomic_fetch_add(&getCpuData()->securityIbpbCompletedCount, uint64_t{1}, __ATOMIC_RELAXED);
+#else
+	auto completed = issuePredictorBarrier();
+	if constexpr(collectIbpbEvents)
+		if(completed)
+		__atomic_fetch_add(&getCpuData()->securityIbpbCompletedCount, uint64_t{1}, __ATOMIC_RELAXED);
+#endif
+}
+
+void reportIbpbDebugSummary() {
+	if constexpr(!security::debugMitigations)
+		return;
+	uint64_t attempted = 0;
+	uint64_t completed = 0;
+	for(size_t i = 0; i < getCpuCount(); ++i) {
+		auto *cpu = getCpuData(i);
+		attempted += __atomic_load_n(&cpu->securityIbpbAttemptCount, __ATOMIC_RELAXED);
+		completed += __atomic_load_n(&cpu->securityIbpbCompletedCount, __ATOMIC_RELAXED);
+	}
+	debugLogger() << "thor: IBPB attempted " << attempted << ", completed " << completed
+			<< frg::endlog;
 }
 
 #if defined(THOR_SECURITY_TEST_HOOKS)
@@ -202,7 +397,16 @@ static initgraph::Task freezeSecurityPolicyTask{&globalInitEngine, "x86.freeze-s
 		if(error != security::PolicyParseError::success)
 			panicLogger() << "thor: invalid speculation_security command-line policy: "
 					<< static_cast<unsigned int>(error) << frg::endlog;
+		error = configureIbpbPolicy(getKernelCmdline(), state.policy().mitigation());
+		if(error != security::PolicyParseError::success)
+			panicLogger() << "thor: invalid speculation_security.ibpb command-line policy: "
+					<< static_cast<unsigned int>(error) << frg::endlog;
+		if(!state.registerMitigation(security::TrustBoundary::processToProcess,
+				&ibpbMitigationDecision))
+			panicLogger() << "thor: failed to register IBPB process-boundary mitigation"
+					<< frg::endlog;
 		state.freezePolicy();
+		ibpbPolicy().freeze();
 		if(!state.publishDeferredBoundaryRecords())
 			panicLogger() << "thor: failed to publish deferred security boundary records"
 					<< frg::endlog;
@@ -291,9 +495,10 @@ void reconcileCpuCapabilities() {
 				"from speculation-control eligible sets" << frg::endlog;
 	if(cpuCapabilitySetFinalized()) {
 		debugLogger() << "thor: security capability CPU-set reconciliation complete" << frg::endlog;
-		if(!security::architectureState().publishUnmitigatedBoundaryRecords())
+		if(!security::architectureState().finalizeBoundaryRecords())
 			panicLogger() << "thor: failed to publish initial security boundary records"
 					<< frg::endlog;
+		reportIbpbDebugSummary();
 	}
 }
 

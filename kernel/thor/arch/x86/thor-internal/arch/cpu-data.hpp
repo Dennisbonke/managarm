@@ -24,6 +24,10 @@ struct AssemblyCpuData {
 	uint64_t securityTransitionCounters[
 			static_cast<size_t>(x86_security::TransitionHook::numHooks)]{};
 #endif
+	// These remain untouched in normal builds. Test-hook builds and an explicit
+	// debugMitigations rebuild use them to report attempted/completed IBPB work.
+	uint64_t securityIbpbAttemptCount{0};
+	uint64_t securityIbpbCompletedCount{0};
 };
 
 static_assert(offsetof(AssemblyCpuData, selfPointer) == THOR_GS_SELF);

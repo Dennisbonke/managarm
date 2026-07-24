@@ -94,6 +94,71 @@ constexpr bool canClearCpuBuffers(const CapabilitySnapshot &snapshot) {
 	return snapshot.haveMdClear;
 }
 
+enum class IbpbTransitionOutcome : uint8_t {
+	notNeeded,
+	inactivePendingApplicabilityEvidence,
+	disabledByPolicy,
+	unavailableOnCpu,
+	invoked
+};
+
+#if defined(THOR_SECURITY_TEST_HOOKS)
+inline constexpr bool collectIbpbEvents = true;
+#else
+inline constexpr bool collectIbpbEvents = security::debugMitigations;
+#endif
+
+// The selector is deliberately pure so both the scheduler and host-independent
+// tests make the same choice without fabricating CPUID availability.
+constexpr IbpbTransitionOutcome classifyIbpbTransition(
+		const security::TransitionDescriptor &transition,
+		const security::MitigationPolicy &policy, const CapabilitySnapshot &snapshot) {
+	if(!security::isIbpbRelevantTransition(transition))
+		return IbpbTransitionOutcome::notNeeded;
+	if(policy.request == security::MechanismRequest::automatic)
+		return IbpbTransitionOutcome::inactivePendingApplicabilityEvidence;
+	if(policy.request == security::MechanismRequest::disabled)
+		return IbpbTransitionOutcome::disabledByPolicy;
+	if(!snapshot.observed || !canIssuePredictorBarrier(snapshot))
+		return IbpbTransitionOutcome::unavailableOnCpu;
+	return IbpbTransitionOutcome::invoked;
+}
+
+// A module-local policy overlays the frozen global default, then becomes
+// immutable with it. It is intentionally not a second global policy.
+class IbpbPolicy {
+public:
+	constexpr const security::MitigationPolicy &policy() const {
+		return policy_;
+	}
+
+	constexpr bool frozen() const {
+		return frozen_;
+	}
+
+	constexpr bool set(security::MitigationPolicy policy) {
+		if(frozen_)
+			return false;
+		policy_ = policy;
+		return true;
+	}
+
+	constexpr void freeze() {
+		frozen_ = true;
+	}
+
+private:
+	security::MitigationPolicy policy_{};
+	bool frozen_{false};
+};
+
+IbpbPolicy &ibpbPolicy();
+security::PolicyParseError configureIbpbPolicy(frg::string_view commandLine,
+		security::MitigationPolicy inherited);
+security::MitigationDecision ibpbMitigationDecision(security::BoundaryPolicy policy);
+void handleIbpbTransition(const security::TransitionDescriptor &transition);
+void reportIbpbDebugSummary();
+
 // Must run locally before VMXON/SVME and before this CPU becomes schedulable.
 void discoverThisCpuCapabilities();
 
@@ -150,6 +215,13 @@ enum class TransitionHook : uint8_t {
 // C++ hooks use this direct helper.
 void transitionHook(TransitionHook hook);
 uint64_t transitionHookCount(TransitionHook hook);
+
+using PredictorBarrierInvoker = bool (*)();
+// A test can observe selection by installing an invoker. Leaving it unset uses
+// the production MSR path, which hardware-gated integration tests exercise.
+PredictorBarrierInvoker setPredictorBarrierInvokerForTest(PredictorBarrierInvoker invoker);
+uint64_t ibpbAttemptCount();
+uint64_t ibpbCompletedCount();
 #else
 inline void transitionHook(TransitionHook) {
 	asm volatile ("" : : : "memory");
