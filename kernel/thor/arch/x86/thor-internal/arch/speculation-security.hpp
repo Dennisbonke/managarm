@@ -64,6 +64,13 @@ struct CapabilitySnapshot {
 	security::Applicability ibpbApplicability{security::Applicability::unknown};
 	const security::Evidence *ibpbApplicabilityEvidence{nullptr};
 
+	// The frozen Intel table marks some affected signatures as requiring an MCU
+	// update in addition to software. Discovery intentionally does not guess a
+	// revision, so this is advisory: it must not suppress an architecturally
+	// advertised IBPB. A future microcode project must add the documented,
+	// signature- and platform-qualified revision comparison before clearing it.
+	bool ibpbMicrocodeMayNeedUpdate{false};
+
 	// Reconciliation marks CPUs that can participate in a common set for the
 	// controls represented above. A false value never means the CPU is offline.
 	bool eligibleForSpeculationControls{false};
@@ -125,7 +132,19 @@ constexpr IbpbTransitionOutcome classifyIbpbTransition(
 	if(policy.request == security::MechanismRequest::automatic) {
 		if(snapshot.ibpbApplicability == security::Applicability::notAffected)
 			return IbpbTransitionOutcome::notAffectedOnCpu;
-		if(snapshot.ibpbApplicability != security::Applicability::affected)
+		// This deliberately diverges from Linux's spectre_v2_user=auto path,
+		// which enables conditional user IBPB from the advertised feature. Thor
+		// requires vendor affected-CPU evidence for bare metal; only a guest may
+		// use its hypervisor's explicit IBPB CPUID contract while physical
+		// applicability remains unknown. Thus an unlisted physical signature is
+		// not treated as vulnerable automatically, at the cost of not applying
+		// Linux's feature-only default to that signature.
+		// Never use a synthetic family/model as physical vulnerability evidence.
+		// However, a guest's IBPB CPUID bit is its explicit architectural contract;
+		// honor it defensively, while reporting applicability as unknown.
+		if(snapshot.ibpbApplicability != security::Applicability::affected
+				&& !(snapshot.hypervisorPresent && snapshot.observed
+						&& canIssuePredictorBarrier(snapshot)))
 			return IbpbTransitionOutcome::inactivePendingApplicabilityEvidence;
 	}
 	if(policy.request == security::MechanismRequest::disabled)
