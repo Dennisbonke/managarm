@@ -595,6 +595,8 @@ Thread::Thread(CtorToken, smarter::shared_ptr<Universe> universe,
 	auto domain = security::domainForIdentity(_addressSpace.get());
 	_executor.setSecurityDomain(domain);
 	intrImage_.setSecurityDomain(domain);
+	_executor.setTransitionScope(security::TransitionScope::userProcess);
+	intrImage_.setTransitionScope(security::TransitionScope::userProcess);
 	_lastRunTimeUpdate = getClockNanos();
 	// TODO: Alternatively, we could add a separate observation for new launched threads.
 	intrState_ = IntrState::inInterrupt;

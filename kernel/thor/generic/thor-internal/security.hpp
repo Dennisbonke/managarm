@@ -24,6 +24,10 @@ inline constexpr size_t numTrustBoundaries = static_cast<size_t>(TrustBoundary::
 using SecurityDomain = uint64_t;
 inline constexpr SecurityDomain kernelDomain = 0;
 
+// This is intentionally a build-time switch. Scheduling-path diagnostics must
+// remain quiet unless a developer deliberately rebuilds with this enabled.
+inline constexpr bool debugMitigations = false;
+
 // Domain identities are opaque at the shared layer. A caller can use the
 // stable address of its owning object when no separately allocated ID exists;
 // null deliberately remains the kernel domain.
@@ -33,6 +37,30 @@ inline SecurityDomain domainForIdentity(const void *identity) {
 
 constexpr bool isDomainChange(SecurityDomain previous, SecurityDomain next) {
 	return previous != next;
+}
+
+// Domain IDs alone do not identify the kind of execution transition. Keep the
+// scope explicit so modules cannot accidentally treat VM, idle, NMI, or
+// kernel/user handoffs as process switches.
+enum class TransitionScope : uint8_t {
+	userProcess,
+	kernel,
+	idle,
+	vm,
+	nmi
+};
+
+struct TransitionDescriptor {
+	SecurityDomain previousDomain;
+	SecurityDomain nextDomain;
+	TransitionScope scope;
+};
+
+constexpr bool isIbpbRelevantTransition(const TransitionDescriptor &transition) {
+	return transition.scope == TransitionScope::userProcess
+			&& transition.previousDomain != kernelDomain
+			&& transition.nextDomain != kernelDomain
+			&& isDomainChange(transition.previousDomain, transition.nextDomain);
 }
 
 enum class Transition : uint8_t {
@@ -310,6 +338,9 @@ struct BoundaryDecision {
 	BoundaryPolicy policy;
 };
 
+using MitigationDecisionProvider = MitigationDecision (*)(BoundaryPolicy);
+inline constexpr size_t maxMitigationsPerBoundary = 4;
+
 // Keep aggregation defensive even if a future caller constructs a decision
 // record directly rather than using deriveDecision().
 constexpr bool isAuditableDecision(const MitigationDecision &decision) {
@@ -412,6 +443,22 @@ public:
 		policy_.freeze();
 	}
 
+	// Modules register before policy freeze. Finalization invokes every module
+	// registered for a boundary and aggregates their immutable decisions.
+	constexpr bool registerMitigation(TrustBoundary boundary,
+			MitigationDecisionProvider provider) {
+		if(policy_.frozen() || !provider)
+			return false;
+		auto index = static_cast<size_t>(boundary);
+		for(size_t i = 0; i < mitigationCounts_[index]; ++i)
+			if(mitigationProviders_[index][i] == provider)
+				return false;
+		if(mitigationCounts_[index] == maxMitigationsPerBoundary)
+			return false;
+		mitigationProviders_[index][mitigationCounts_[index]++] = provider;
+		return true;
+	}
+
 	// Records are published only after policy freeze and only once. This keeps a
 	// finalized protected boundary from being silently weakened by a later CPU
 	// observation; a future CPU-hotplug policy must decide whether to exclude the
@@ -443,17 +490,20 @@ public:
 				policy_.boundary(boundary)));
 	}
 
-	// The foundation has no mitigation modules yet. Once every CPU capability
-	// snapshot is known, publish explicit unknown records for all other
-	// permissive boundaries instead of leaving them absent. Later mitigation
-	// modules replace this finalization step with their aggregate decisions.
-	constexpr bool publishUnmitigatedBoundaryRecords() {
+	// Once CPU capability discovery is complete, registered modules contribute
+	// their decisions. Boundaries without a module deliberately retain the
+	// explicit unknown placeholder instead of being silently omitted.
+	constexpr bool finalizeBoundaryRecords() {
 		for(size_t i = 0; i < numTrustBoundaries; ++i) {
 			auto boundary = static_cast<TrustBoundary>(i);
 			if(boundary == TrustBoundary::smtSibling)
 				continue;
-			if(!publishBoundaryDecision(aggregateBoundary(boundary, nullptr, 0,
-						policy_.boundary(boundary))))
+			auto index = static_cast<size_t>(boundary);
+			MitigationDecision decisions[maxMitigationsPerBoundary]{};
+			for(size_t j = 0; j < mitigationCounts_[index]; ++j)
+				decisions[j] = mitigationProviders_[index][j](policy_.boundary(boundary));
+			if(!publishBoundaryDecision(aggregateBoundary(boundary, decisions,
+						mitigationCounts_[index], policy_.boundary(boundary))))
 				return false;
 		}
 		return true;
@@ -463,6 +513,9 @@ private:
 	Policy policy_{};
 	frg::array<BoundaryDecision, numTrustBoundaries> boundaryDecisions_{};
 	frg::array<bool, numTrustBoundaries> boundaryPublished_{};
+	frg::array<frg::array<MitigationDecisionProvider, maxMitigationsPerBoundary>,
+			numTrustBoundaries> mitigationProviders_{};
+	frg::array<size_t, numTrustBoundaries> mitigationCounts_{};
 };
 
 ArchitectureState &architectureState();

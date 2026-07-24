@@ -91,6 +91,8 @@ concept ValidExecutor = requires(T *ex,
 	{ ex->result1() } -> std::same_as<Word *>;
 	{ ex->securityDomain() } -> std::same_as<security::SecurityDomain>;
 	{ ex->setSecurityDomain(security::kernelDomain) } -> std::same_as<void>;
+	{ ex->transitionScope() } -> std::same_as<security::TransitionScope>;
+	{ ex->setTransitionScope(security::TransitionScope::kernel) } -> std::same_as<void>;
 	// Save/restore
 	{ saveExecutor(ex, f) } -> std::same_as<void>;
 	{ saveExecutor(ex, i) } -> std::same_as<void>;

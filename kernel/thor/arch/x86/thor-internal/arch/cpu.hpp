@@ -433,6 +433,14 @@ public:
 		_securityDomain = domain;
 	}
 
+	security::TransitionScope transitionScope() const {
+		return _transitionScope;
+	}
+
+	void setTransitionScope(security::TransitionScope scope) {
+		_transitionScope = scope;
+	}
+
 private:
 	// Private function only used for the static_assert check.
 	//
@@ -448,6 +456,7 @@ private:
 	common::x86::Tss64 *_tss;
 	UserAccessRegion *_uar;
 	security::SecurityDomain _securityDomain{security::kernelDomain};
+	security::TransitionScope _transitionScope{security::TransitionScope::kernel};
 };
 
 struct CpuFeatures {

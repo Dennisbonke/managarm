@@ -279,6 +279,14 @@ public:
 		_securityDomain = domain;
 	}
 
+	security::TransitionScope transitionScope() const {
+		return _transitionScope;
+	}
+
+	void setTransitionScope(security::TransitionScope scope) {
+		_transitionScope = scope;
+	}
+
 private:
 	// Private function only used for the static_assert check.
 	//
@@ -294,6 +302,7 @@ private:
 	void *_exceptionStack;
 	UserAccessRegion *_uar{nullptr};
 	security::SecurityDomain _securityDomain{security::kernelDomain};
+	security::TransitionScope _transitionScope{security::TransitionScope::kernel};
 };
 
 // Determine whether this address belongs to the higher half.

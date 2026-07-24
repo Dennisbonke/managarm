@@ -168,7 +168,7 @@ constexpr bool testBoundaryRecordPublication() {
 	state.freezePolicy();
 	if(!state.publishDeferredBoundaryRecords())
 		return false;
-	if(!state.publishUnmitigatedBoundaryRecords())
+	if(!state.finalizeBoundaryRecords())
 		return false;
 	auto decision = state.boundaryDecision(TrustBoundary::smtSibling);
 	if(!decision || decision->result != Result::unavailable
@@ -186,7 +186,7 @@ constexpr bool testBoundaryRecordPublication() {
 			return false;
 	}
 	return !state.publishDeferredBoundaryRecords()
-			&& !state.publishUnmitigatedBoundaryRecords();
+		&& !state.finalizeBoundaryRecords();
 }
 static_assert(testBoundaryRecordPublication());
 static_assert(!isDomainChange(kernelDomain, kernelDomain));
@@ -308,28 +308,43 @@ constexpr PolicyParseError parseMitigationPolicyImpl(frg::string_view commandLin
 	return PolicyParseError::success;
 }
 
-constexpr bool testFutureMitigationParser() {
-	// "testing_only" is intentionally not a kernel mitigation. This exercises
-	// the registration-facing parser without inventing a production selector.
-	constexpr char commandLine[] = "speculation_security=off "
-			"speculation_security.testing_only=enable";
-	MitigationPolicy policy{MechanismRequest::disabled, PolicySource::commandLine};
-	if(parseMitigationPolicyImpl({commandLine, sizeof(commandLine) - 1},
-				{"testing_only", sizeof("testing_only") - 1}, policy)
-				!= PolicyParseError::success)
+constexpr bool testIbpbPolicyParser() {
+	constexpr char ibpb[] = "ibpb";
+	constexpr char inheritedOnly[] = "speculation_security=off";
+	constexpr char autoOption[] = "speculation_security.ibpb=auto";
+	constexpr char enableOption[] = "speculation_security.ibpb=enable";
+	constexpr char disableOption[] = "speculation_security.ibpb=disable";
+	constexpr char malformedOption[] = "speculation_security.ibpb";
+	constexpr char conflictingOptions[] =
+			"speculation_security.ibpb=auto speculation_security.ibpb=enable";
+	MitigationPolicy inheritedOff{MechanismRequest::disabled, PolicySource::commandLine};
+	auto policy = inheritedOff;
+	if(parseMitigationPolicyImpl({inheritedOnly, sizeof(inheritedOnly) - 1},
+				{ibpb, sizeof(ibpb) - 1}, policy) != PolicyParseError::success
+				|| policy.request != MechanismRequest::disabled)
 		return false;
-	return policy.request == MechanismRequest::forced;
+	policy = inheritedOff;
+	if(parseMitigationPolicyImpl({autoOption, sizeof(autoOption) - 1},
+				{ibpb, sizeof(ibpb) - 1}, policy) != PolicyParseError::success
+				|| policy.request != MechanismRequest::automatic)
+		return false;
+	policy = inheritedOff;
+	if(parseMitigationPolicyImpl({enableOption, sizeof(enableOption) - 1},
+				{ibpb, sizeof(ibpb) - 1}, policy) != PolicyParseError::success
+				|| policy.request != MechanismRequest::forced)
+		return false;
+	policy = {};
+	if(parseMitigationPolicyImpl({disableOption, sizeof(disableOption) - 1},
+				{ibpb, sizeof(ibpb) - 1}, policy) != PolicyParseError::success
+				|| policy.request != MechanismRequest::disabled)
+		return false;
+	if(parseMitigationPolicyImpl({malformedOption, sizeof(malformedOption) - 1},
+				{ibpb, sizeof(ibpb) - 1}, policy) != PolicyParseError::malformedOption)
+		return false;
+	return parseMitigationPolicyImpl({conflictingOptions, sizeof(conflictingOptions) - 1},
+				{ibpb, sizeof(ibpb) - 1}, policy) == PolicyParseError::conflictingOption;
 }
-static_assert(testFutureMitigationParser());
-
-constexpr bool testMalformedMitigationOption() {
-	constexpr char commandLine[] = "speculation_security.testing_only";
-	MitigationPolicy policy{};
-	return parseMitigationPolicyImpl({commandLine, sizeof(commandLine) - 1},
-			{"testing_only", sizeof("testing_only") - 1}, policy)
-			== PolicyParseError::malformedOption;
-}
-static_assert(testMalformedMitigationOption());
+static_assert(testIbpbPolicyParser());
 } // namespace
 
 PolicyParseError parseMitigationPolicy(frg::string_view commandLine,
