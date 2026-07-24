@@ -45,25 +45,137 @@ constexpr security::Evidence ibpbMechanismEvidence{
 		"Intel CPUID.07H.0:EDX[26] and IA32_PRED_CMD; AMD Speculation Control",
 		"",
 		"",
-		"CPUID authorizes the local predictor-barrier mechanism but no affected-CPU "
-		"predicate is provided by this module."
+		"CPUID authorizes only the local predictor-barrier mechanism; applicability "
+		"is established by the separate, vendor-backed registry entries below."
+};
+
+constexpr security::Evidence intelBranchTargetInjectionEvidence{
+		"intel.bti.affected-processors.2026-07-25",
+		security::Vendor::intel,
+		"Intel-affected-processor-list b8945071bbe3688f8fee344e78a01b33fd34f46d",
+		"Intel Affected Processor List",
+		"snapshot 2026-07-25; SHA-256 e8664f58468c5839151025f4afcabbb964c7ad427345ee3c9ca74c302658413f",
+		"Branch Target Injection (Spectre v2) column; CPUID Family_Model and Stepping",
+		"CVE-2017-5715 / INTEL-SA-00088",
+		"e8664f58468c5839151025f4afcabbb964c7ad427345ee3c9ca74c302658413f",
+		"Matches only the exact Intel family 06 model/stepping rows whose Branch Target "
+		"Injection column requires a mitigation. A physical product table is never used "
+		"when CPUID reports a hypervisor."
+};
+
+constexpr security::Evidence amdBranchTargetInjectionEvidence{
+		"amd.bti.affected-products.2022",
+		security::Vendor::amd,
+		"AMD-SB-1036; Technical Guidance for Mitigating Branch Type Confusion",
+		"LFENCE/JMP Mitigation Update for CVE-2017-5715",
+		"AMD-SB-1036, 2022-03-08; Branch Type Confusion guidance, 2022",
+		"Affected Products; BTC-IND family/model table",
+		"CVE-2017-5715 / CVE-2021-26401",
+		"",
+		"Maps AMD's affected Zen product generations to the published Family 17h and "
+		"Family 19h model ranges. A physical product table is never used when CPUID "
+		"reports a hypervisor."
+};
+
+constexpr security::Evidence ibpbApplicabilityAggregateEvidence{
+		"x86.ibpb.applicability.aggregate.2026",
+		security::Vendor::unknown,
+		"Intel-affected-processor-list; AMD-SB-1036",
+		"x86 IBPB applicability aggregate",
+		"2026-07-25",
+		"Per-CPU vendor applicability registry aggregation",
+		"CVE-2017-5715",
+		"",
+		"The boundary decision aggregates the immutable per-CPU Intel and AMD evidence "
+		"records; any unknown CPU keeps the aggregate applicability unknown."
 };
 
 constexpr const security::Evidence *x86EvidenceEntries[] = {
 		&intelCpuid,
 		&amdCpuid,
-		&ibpbMechanismEvidence
+		&ibpbMechanismEvidence,
+		&intelBranchTargetInjectionEvidence,
+		&amdBranchTargetInjectionEvidence,
+		&ibpbApplicabilityAggregateEvidence
 };
 constexpr security::EvidenceRegistry x86EvidenceRegistry{
 		x86EvidenceEntries, sizeof(x86EvidenceEntries) / sizeof(x86EvidenceEntries[0])
 };
-static_assert(x86EvidenceRegistry.count == 3);
+static_assert(x86EvidenceRegistry.count == 6);
 static_assert(x86EvidenceRegistry.at(0) == &intelCpuid);
 static_assert(x86EvidenceRegistry.at(1) == &amdCpuid);
 static_assert(x86EvidenceRegistry.at(2) == &ibpbMechanismEvidence);
+static_assert(x86EvidenceRegistry.at(3) == &intelBranchTargetInjectionEvidence);
+static_assert(x86EvidenceRegistry.at(4) == &amdBranchTargetInjectionEvidence);
+static_assert(x86EvidenceRegistry.at(5) == &ibpbApplicabilityAggregateEvidence);
 
 constexpr uint32_t bit(unsigned int n) {
 	return uint32_t{1} << n;
+}
+
+struct IntelAffectedStepping {
+	uint32_t model;
+	uint16_t steppingMask;
+};
+
+// Intel's official machine-readable affected-processor snapshot contains these
+// exact Family 06 model/stepping rows in its Spectre-v2 column. Do not turn a
+// range into an inference: a bit is present only when the published row is.
+constexpr IntelAffectedStepping intelAffectedSteppings[] = {
+		{0x3f, 0x0014}, {0x4f, 0x0002}, {0x55, 0x0818}, {0x56, 0x0038},
+		{0x5c, 0x0400}, {0x5e, 0x0008}, {0x5f, 0xffff}, {0x6a, 0x0040},
+		{0x6c, 0xffff}, {0x7a, 0x0100}, {0x7e, 0x0020}, {0x86, 0x00a0},
+		{0x8c, 0x0006}, {0x8d, 0x0002}, {0x8e, 0x1e00}, {0x8f, 0x01e0},
+		{0x96, 0xffff}, {0x97, 0x0024}, {0x9a, 0x0018}, {0x9c, 0xffff},
+		{0x9e, 0x3600}, {0xa5, 0x002c}, {0xa6, 0x0003}, {0xa7, 0x0002},
+		{0xaa, 0x0002}, {0xad, 0x0002}, {0xae, 0x0002}, {0xaf, 0x0008},
+		{0xb5, 0x0001}, {0xb6, 0x0010}, {0xb7, 0x0002}, {0xba, 0x010c},
+		{0xbd, 0x0002}, {0xbe, 0x0001}, {0xbf, 0x0024}, {0xc5, 0x0004},
+		{0xc6, 0x0004}, {0xcc, 0x000c}, {0xcf, 0x0004}, {0xd5, 0x0002},
+		{0xd7, 0x0001}
+};
+
+constexpr bool isIntelAffectedByBranchTargetInjection(const CapabilitySnapshot &snapshot) {
+	if(snapshot.vendor != CpuVendor::intel || snapshot.family != 0x6 || snapshot.stepping >= 16)
+		return false;
+	for(auto entry : intelAffectedSteppings)
+		if(entry.model == snapshot.model && (entry.steppingMask & (uint16_t{1} << snapshot.stepping)))
+			return true;
+	return false;
+}
+
+#warning "TODO(security): Audit AMD IBPB applicability against a CPUID-precise vendor source"
+// TODO(security): The current AMD Family 17h/19h ranges were derived by
+// collapsing product lists and BTC guidance that cover different issues. In
+// particular, the BTC guidance says Family 19h is not vulnerable to BTC while
+// SB-1036 lists selected Family 19h products for its LFENCE/JMP issue; neither
+// document classifies every Zen generation or Family 1Ah for this IBPB policy.
+// Keep unknown rather than extending this mapping until a vendor-authoritative,
+// CPUID family/model/stepping applicability source is incorporated.
+constexpr bool isAmdAffectedByBranchTargetInjection(const CapabilitySnapshot &snapshot) {
+	if(snapshot.vendor != CpuVendor::amd)
+		return false;
+	// AMD-SB-1036 identifies the affected EPYC/Ryzen generations. AMD's family
+	// table maps those generations to these Family 17h and 19h model intervals.
+	if(snapshot.family == 0x17)
+		return snapshot.model <= 0x2f
+				|| (snapshot.model >= 0x30 && snapshot.model <= 0x7f)
+				|| (snapshot.model >= 0xa0 && snapshot.model <= 0xaf);
+	return snapshot.family == 0x19;
+}
+
+constexpr void determineIbpbApplicability(CapabilitySnapshot &snapshot) {
+	snapshot.ibpbApplicability = security::Applicability::unknown;
+	snapshot.ibpbApplicabilityEvidence = nullptr;
+	if(snapshot.hypervisorPresent)
+		return;
+	if(isIntelAffectedByBranchTargetInjection(snapshot)) {
+		snapshot.ibpbApplicability = security::Applicability::affected;
+		snapshot.ibpbApplicabilityEvidence = &intelBranchTargetInjectionEvidence;
+	} else if(isAmdAffectedByBranchTargetInjection(snapshot)) {
+		snapshot.ibpbApplicability = security::Applicability::affected;
+		snapshot.ibpbApplicabilityEvidence = &amdBranchTargetInjectionEvidence;
+	}
 }
 
 CpuVendor decodeVendor(const CpuidRegisters &leaf) {
@@ -124,6 +236,38 @@ constexpr bool testAmdSpeculationCapabilityDecoding() {
 }
 static_assert(testAmdSpeculationCapabilityDecoding());
 
+constexpr bool testIbpbApplicabilityRegistry() {
+	CapabilitySnapshot intel{
+		.vendor = CpuVendor::intel, .family = 0x6, .model = 0x55, .stepping = 0x4
+	};
+	determineIbpbApplicability(intel);
+	if(intel.ibpbApplicability != security::Applicability::affected
+			|| intel.ibpbApplicabilityEvidence != &intelBranchTargetInjectionEvidence)
+		return false;
+
+	CapabilitySnapshot intelUnlisted{
+		.vendor = CpuVendor::intel, .family = 0x6, .model = 0x55, .stepping = 0x5
+	};
+	determineIbpbApplicability(intelUnlisted);
+	if(intelUnlisted.ibpbApplicability != security::Applicability::unknown)
+		return false;
+
+	CapabilitySnapshot amd{
+		.vendor = CpuVendor::amd, .family = 0x17, .model = 0x31
+	};
+	determineIbpbApplicability(amd);
+	if(amd.ibpbApplicability != security::Applicability::affected
+			|| amd.ibpbApplicabilityEvidence != &amdBranchTargetInjectionEvidence)
+		return false;
+
+	CapabilitySnapshot virtualized = intel;
+	virtualized.hypervisorPresent = true;
+	determineIbpbApplicability(virtualized);
+	return virtualized.ibpbApplicability == security::Applicability::unknown
+			&& !virtualized.ibpbApplicabilityEvidence;
+}
+static_assert(testIbpbApplicabilityRegistry());
+
 constexpr CapabilitySnapshot compatibleSynthetic{
 	.observed = true,
 	.vendor = CpuVendor::intel,
@@ -166,6 +310,20 @@ constexpr CapabilitySnapshot virtualizedSynthetic{
 	.haveIbrs = true,
 	.haveIbpb = true
 };
+constexpr CapabilitySnapshot affectedIntelSynthetic{
+	.observed = true,
+	.vendor = CpuVendor::intel,
+	.haveIbrs = true,
+	.haveIbpb = true,
+	.ibpbApplicability = security::Applicability::affected,
+	.ibpbApplicabilityEvidence = &intelBranchTargetInjectionEvidence
+};
+constexpr CapabilitySnapshot notAffectedSynthetic{
+	.observed = true,
+	.vendor = CpuVendor::intel,
+	.haveIbpb = true,
+	.ibpbApplicability = security::Applicability::notAffected
+};
 static_assert(!canReadArchCapabilities(unprivilegedSynthetic));
 static_assert(!canAccessSpeculationControl(unprivilegedSynthetic));
 static_assert(!canIssuePredictorBarrier(unprivilegedSynthetic));
@@ -205,6 +363,12 @@ static_assert(classifyIbpbTransition(differentUserDomains,
 		{security::MechanismRequest::automatic, security::PolicySource::defaultValue},
 		intelArchCapabilitiesSynthetic)
 			== IbpbTransitionOutcome::inactivePendingApplicabilityEvidence);
+static_assert(classifyIbpbTransition(differentUserDomains,
+		{security::MechanismRequest::automatic, security::PolicySource::defaultValue},
+		affectedIntelSynthetic) == IbpbTransitionOutcome::invoked);
+static_assert(classifyIbpbTransition(differentUserDomains,
+		{security::MechanismRequest::automatic, security::PolicySource::defaultValue},
+		notAffectedSynthetic) == IbpbTransitionOutcome::notAffectedOnCpu);
 static_assert(classifyIbpbTransition(differentUserDomains,
 		{security::MechanismRequest::disabled, security::PolicySource::commandLine},
 		intelArchCapabilitiesSynthetic) == IbpbTransitionOutcome::disabledByPolicy);
@@ -306,18 +470,29 @@ security::PolicyParseError configureIbpbPolicy(frg::string_view commandLine,
 }
 
 security::MitigationDecision ibpbMitigationDecision(security::BoundaryPolicy boundaryPolicy) {
-	bool allAvailable = getCpuCount() != 0;
+	bool allAffectedAvailable = true;
+	bool anyAffected = false;
+	bool anyUnknown = getCpuCount() == 0;
 	for(size_t i = 0; i < getCpuCount(); ++i) {
 		auto &snapshot = getCpuData(i)->securityCapabilities;
-		allAvailable &= snapshot.observed && canIssuePredictorBarrier(snapshot);
+		if(!snapshot.observed || snapshot.ibpbApplicability == security::Applicability::unknown) {
+			anyUnknown = true;
+			continue;
+		}
+		if(snapshot.ibpbApplicability == security::Applicability::affected) {
+			anyAffected = true;
+			allAffectedAvailable &= canIssuePredictorBarrier(snapshot);
+		}
 	}
-	auto mechanism = allAvailable ? security::MechanismAvailability::available
+	auto applicability = anyUnknown ? security::Applicability::unknown
+			: anyAffected ? security::Applicability::affected : security::Applicability::notAffected;
+	auto mechanism = allAffectedAvailable ? security::MechanismAvailability::available
 			: security::MechanismAvailability::unavailable;
 	auto policy = ibpbPolicy().policy();
 	auto enforcement = policy.request == security::MechanismRequest::disabled
 			? security::Enforcement::disabledByPolicy : security::Enforcement::notAttempted;
-	return security::deriveDecision({security::Applicability::unknown, mechanism, enforcement,
-			policy, boundaryPolicy, &ibpbMechanismEvidence});
+	return security::deriveDecision({applicability, mechanism, enforcement,
+			policy, boundaryPolicy, &ibpbApplicabilityAggregateEvidence});
 }
 
 #if defined(THOR_SECURITY_TEST_HOOKS)
@@ -377,10 +552,29 @@ void reportIbpbDebugSummary() {
 
 		const char *policyName;
 		const char *reason;
+		const char *applicabilityName;
+		switch(snapshot.ibpbApplicability) {
+			case security::Applicability::affected:
+				applicabilityName = "affected";
+				break;
+			case security::Applicability::notAffected:
+				applicabilityName = "not affected";
+				break;
+			case security::Applicability::unknown:
+				applicabilityName = "unknown";
+				break;
+		}
 		switch(policy.request) {
 			case security::MechanismRequest::automatic:
 				policyName = "auto";
-				reason = "inactive: affected-CPU applicability is unknown";
+				if(snapshot.ibpbApplicability == security::Applicability::affected)
+					reason = snapshot.observed && canIssuePredictorBarrier(snapshot)
+						? "eligible on distinct user-process switches"
+						: "inactive: local CPUID does not enumerate IBPB";
+				else if(snapshot.ibpbApplicability == security::Applicability::notAffected)
+					reason = "inactive: vendor evidence marks CPU not affected";
+				else
+					reason = "inactive: no matching vendor affected-CPU evidence";
 				break;
 			case security::MechanismRequest::disabled:
 				policyName = "disable";
@@ -397,6 +591,9 @@ void reportIbpbDebugSummary() {
 				<< "; local mechanism "
 				<< (snapshot.observed && canIssuePredictorBarrier(snapshot)
 						? "available" : "unavailable")
+				<< "; applicability " << applicabilityName
+				<< " (" << (snapshot.ibpbApplicabilityEvidence
+						? snapshot.ibpbApplicabilityEvidence->id : "none") << ")"
 				<< "; " << reason << frg::endlog;
 	}
 	debugLogger() << "thor: IBPB attempted " << attempted << ", completed " << completed
@@ -483,6 +680,7 @@ void discoverThisCpuCapabilities() {
 	} else if(snapshot.vendor == CpuVendor::amd) {
 		snapshot.capabilityEvidence = &amdCpuid;
 	}
+	determineIbpbApplicability(snapshot);
 
 	// Do not infer an AMD or virtualized microcode revision and do not issue an
 	// uncertain MSR read. A later, evidence-backed microcode project owns that.

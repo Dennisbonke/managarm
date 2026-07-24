@@ -58,6 +58,12 @@ struct CapabilitySnapshot {
 	bool microcodeRevisionKnown{false};
 	uint64_t microcodeRevision{0};
 
+	// This is deliberately distinct from mechanism capability. It is populated
+	// only by the compiled-in, vendor-backed affected-CPU registry; unknown is
+	// the safe result for virtual CPUs and identities outside that registry.
+	security::Applicability ibpbApplicability{security::Applicability::unknown};
+	const security::Evidence *ibpbApplicabilityEvidence{nullptr};
+
 	// Reconciliation marks CPUs that can participate in a common set for the
 	// controls represented above. A false value never means the CPU is offline.
 	bool eligibleForSpeculationControls{false};
@@ -96,6 +102,7 @@ constexpr bool canClearCpuBuffers(const CapabilitySnapshot &snapshot) {
 
 enum class IbpbTransitionOutcome : uint8_t {
 	notNeeded,
+	notAffectedOnCpu,
 	inactivePendingApplicabilityEvidence,
 	disabledByPolicy,
 	unavailableOnCpu,
@@ -115,8 +122,12 @@ constexpr IbpbTransitionOutcome classifyIbpbTransition(
 		const security::MitigationPolicy &policy, const CapabilitySnapshot &snapshot) {
 	if(!security::isIbpbRelevantTransition(transition))
 		return IbpbTransitionOutcome::notNeeded;
-	if(policy.request == security::MechanismRequest::automatic)
-		return IbpbTransitionOutcome::inactivePendingApplicabilityEvidence;
+	if(policy.request == security::MechanismRequest::automatic) {
+		if(snapshot.ibpbApplicability == security::Applicability::notAffected)
+			return IbpbTransitionOutcome::notAffectedOnCpu;
+		if(snapshot.ibpbApplicability != security::Applicability::affected)
+			return IbpbTransitionOutcome::inactivePendingApplicabilityEvidence;
+	}
 	if(policy.request == security::MechanismRequest::disabled)
 		return IbpbTransitionOutcome::disabledByPolicy;
 	if(!snapshot.observed || !canIssuePredictorBarrier(snapshot))
