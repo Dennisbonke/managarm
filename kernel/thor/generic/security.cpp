@@ -158,6 +158,37 @@ static_assert(forgedDisabledBoundary.result != Result::protectedResult);
 constexpr auto deferredSmtBoundary = aggregateBoundary(TrustBoundary::smtSibling,
 		nullptr, 0, {BoundaryRequirement::required, PolicySource::commandLine});
 static_assert(deferredSmtBoundary.result == Result::unavailable);
+static_assert(!canActivateBoundary(deferredSmtBoundary));
+
+constexpr bool testBoundaryRecordPublication() {
+	ArchitectureState state;
+	if(!state.policy().setBoundary(TrustBoundary::smtSibling,
+			{BoundaryRequirement::required, PolicySource::commandLine}))
+		return false;
+	state.freezePolicy();
+	if(!state.publishDeferredBoundaryRecords())
+		return false;
+	if(!state.publishUnmitigatedBoundaryRecords())
+		return false;
+	auto decision = state.boundaryDecision(TrustBoundary::smtSibling);
+	if(!decision || decision->result != Result::unavailable
+			|| canActivateBoundary(*decision))
+		return false;
+	for(size_t i = 0; i < numTrustBoundaries; ++i) {
+		auto boundary = static_cast<TrustBoundary>(i);
+		auto published = state.boundaryDecision(boundary);
+		if(!published)
+			return false;
+		if(boundary != TrustBoundary::smtSibling
+				&& (published->result != Result::unknown
+					|| published->reason != Reason::noRelevantMitigations
+					|| !canActivateBoundary(*published)))
+			return false;
+	}
+	return !state.publishDeferredBoundaryRecords()
+			&& !state.publishUnmitigatedBoundaryRecords();
+}
+static_assert(testBoundaryRecordPublication());
 static_assert(!isDomainChange(kernelDomain, kernelDomain));
 static_assert(isDomainChange(kernelDomain, SecurityDomain{1}));
 
