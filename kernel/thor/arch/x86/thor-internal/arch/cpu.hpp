@@ -425,6 +425,14 @@ public:
 		return _uar;
 	}
 
+	security::SecurityDomain securityDomain() const {
+		return _securityDomain;
+	}
+
+	void setSecurityDomain(security::SecurityDomain domain) {
+		_securityDomain = domain;
+	}
+
 private:
 	// Private function only used for the static_assert check.
 	//
@@ -439,6 +447,7 @@ private:
 	void *_syscallStack;
 	common::x86::Tss64 *_tss;
 	UserAccessRegion *_uar;
+	security::SecurityDomain _securityDomain{security::kernelDomain};
 };
 
 struct CpuFeatures {

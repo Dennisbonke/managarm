@@ -158,6 +158,8 @@ static_assert(forgedDisabledBoundary.result != Result::protectedResult);
 constexpr auto deferredSmtBoundary = aggregateBoundary(TrustBoundary::smtSibling,
 		nullptr, 0, {BoundaryRequirement::required, PolicySource::commandLine});
 static_assert(deferredSmtBoundary.result == Result::unavailable);
+static_assert(!isDomainChange(kernelDomain, kernelDomain));
+static_assert(isDomainChange(kernelDomain, SecurityDomain{1}));
 
 constexpr bool testPolicyFreeze() {
 	Policy policy;
