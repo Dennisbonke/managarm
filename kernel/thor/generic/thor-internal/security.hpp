@@ -266,6 +266,27 @@ struct BoundaryDecision {
 	BoundaryPolicy policy;
 };
 
+// Keep aggregation defensive even if a future caller constructs a decision
+// record directly rather than using deriveDecision().
+constexpr bool isAuditableDecision(const MitigationDecision &decision) {
+	if(!decision.evidence)
+		return decision.result != Result::protectedResult && decision.result != Result::notAffected;
+	if((decision.policy.request == MechanismRequest::disabled
+				&& decision.enforcement == Enforcement::enabled)
+			|| (decision.policy.request != MechanismRequest::disabled
+				&& decision.enforcement == Enforcement::disabledByPolicy))
+		return false;
+	if(decision.result == Result::protectedResult)
+		return decision.applicability == Applicability::affected
+				&& decision.mechanism == MechanismAvailability::available
+				&& decision.enforcement == Enforcement::enabled;
+	if(decision.result == Result::notAffected)
+		return decision.applicability == Applicability::notAffected
+				&& decision.mechanism == MechanismAvailability::notRequired
+				&& decision.enforcement == Enforcement::notRequired;
+	return true;
+}
+
 // A boundary can only be protected when every relevant mitigation is either
 // vendor-established not affected or successfully enforced.
 constexpr BoundaryDecision aggregateBoundary(TrustBoundary boundary,
@@ -286,6 +307,12 @@ constexpr BoundaryDecision aggregateBoundary(TrustBoundary boundary,
 	Reason unprotectedReason = Reason::invalidState;
 	Reason unknownReason = Reason::invalidState;
 	for(size_t i = 0; i < count; ++i) {
+		if(!isAuditableDecision(decisions[i]))
+			return {boundary, policy.requirement == BoundaryRequirement::required
+						? Result::unavailable : Result::unknown,
+					policy.requirement == BoundaryRequirement::required
+							? Reason::requiredBoundaryUnavailable : Reason::invalidState,
+					policy};
 		switch(decisions[i].result) {
 			case Result::notAffected:
 			case Result::protectedResult:

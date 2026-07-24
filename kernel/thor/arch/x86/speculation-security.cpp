@@ -73,7 +73,7 @@ constexpr void decodeSpeculationCapabilities(CapabilitySnapshot &snapshot) {
 	snapshot.haveArchCapabilities = snapshot.structuredLeaf7_0.edx & bit(29);
 }
 
-bool controlsCompatible(const CapabilitySnapshot &a, const CapabilitySnapshot &b) {
+constexpr bool controlsCompatible(const CapabilitySnapshot &a, const CapabilitySnapshot &b) {
 	return a.vendor == b.vendor
 			&& a.hypervisorPresent == b.hypervisorPresent
 			&& a.haveIbrs == b.haveIbrs
@@ -96,6 +96,27 @@ constexpr bool testAmdSpeculationCapabilityDecoding() {
 			&& snapshot.haveStibp && snapshot.haveSsbd;
 }
 static_assert(testAmdSpeculationCapabilityDecoding());
+
+constexpr CapabilitySnapshot compatibleSynthetic{
+	.observed = true,
+	.vendor = CpuVendor::intel,
+	.haveIbrs = true,
+	.haveIbpb = true,
+	.haveArchCapabilities = true,
+	.archCapabilitiesKnown = true,
+	.archCapabilities = 1
+};
+constexpr CapabilitySnapshot incompatibleSynthetic{
+	.observed = true,
+	.vendor = CpuVendor::intel,
+	.haveIbrs = true,
+	.haveIbpb = true,
+	.haveArchCapabilities = true,
+	.archCapabilitiesKnown = true,
+	.archCapabilities = 2
+};
+static_assert(controlsCompatible(compatibleSynthetic, compatibleSynthetic));
+static_assert(!controlsCompatible(compatibleSynthetic, incompatibleSynthetic));
 
 } // namespace
 

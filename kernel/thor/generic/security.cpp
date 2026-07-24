@@ -66,6 +66,27 @@ constexpr auto unavailableBoundary = aggregateBoundary(TrustBoundary::userToKern
 static_assert(unavailableBoundary.result == Result::unprotected);
 static_assert(unavailableBoundary.reason == Reason::mechanismUnavailable);
 
+constexpr MitigationDecision forgedProtected{
+		Applicability::affected, MechanismAvailability::available, Enforcement::enabled,
+		{}, {}, Result::protectedResult, Reason::enforcementEnabled, nullptr
+};
+constexpr auto forgedBoundary = aggregateBoundary(TrustBoundary::guestToHost,
+		&forgedProtected, 1, {});
+static_assert(forgedBoundary.result != Result::protectedResult);
+
+constexpr MitigationDecision forgedDisabledButProtected{
+		Applicability::affected, MechanismAvailability::available, Enforcement::enabled,
+		{MechanismRequest::disabled, PolicySource::commandLine}, {},
+		Result::protectedResult, Reason::enforcementEnabled, &testEvidence
+};
+constexpr auto forgedDisabledBoundary = aggregateBoundary(TrustBoundary::guestToHost,
+		&forgedDisabledButProtected, 1, {});
+static_assert(forgedDisabledBoundary.result != Result::protectedResult);
+
+constexpr auto deferredSmtBoundary = aggregateBoundary(TrustBoundary::smtSibling,
+		nullptr, 0, {BoundaryRequirement::required, PolicySource::commandLine});
+static_assert(deferredSmtBoundary.result == Result::unavailable);
+
 constexpr bool testPolicyFreeze() {
 	Policy policy;
 	if(!policy.setBoundary(TrustBoundary::guestToHost,
