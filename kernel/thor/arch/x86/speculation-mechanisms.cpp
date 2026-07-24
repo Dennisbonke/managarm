@@ -9,10 +9,10 @@ namespace {
 
 constexpr bool canUpdateSpeculationControl(const CapabilitySnapshot &snapshot,
 		SpeculationControlState state) {
-	return (!state.ibrs || snapshot.haveIbrs)
-			&& (!state.stibp || snapshot.haveStibp)
-			&& (!state.ssbd || snapshot.haveSsbd)
-			&& (snapshot.haveIbrs || snapshot.haveStibp || snapshot.haveSsbd);
+	return (!state.ibrs || canWriteIbrs(snapshot))
+			&& (!state.stibp || canWriteStibp(snapshot))
+			&& (!state.ssbd || canWriteSsbd(snapshot))
+			&& canAccessSpeculationControl(snapshot);
 }
 
 constexpr CapabilitySnapshot stibpOnlySnapshot{.haveStibp = true};
@@ -42,14 +42,14 @@ bool updateSpeculationControl(SpeculationControlState state) {
 }
 
 bool issuePredictorBarrier() {
-	if(!getCpuData()->securityCapabilities.haveIbpb)
+	if(!canIssuePredictorBarrier(getCpuData()->securityCapabilities))
 		return false;
 	common::x86::wrmsr(0x49, 1); // PRED_CMD.IBPB
 	return true;
 }
 
 bool clearCpuBuffers(uint16_t selector) {
-	if(!getCpuData()->securityCapabilities.haveMdClear)
+	if(!canClearCpuBuffers(getCpuData()->securityCapabilities))
 		return false;
 
 	// The caller owns the descriptor setup; this primitive does not invent a

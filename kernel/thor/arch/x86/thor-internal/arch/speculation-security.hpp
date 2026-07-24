@@ -64,6 +64,36 @@ struct CapabilitySnapshot {
 	const security::Evidence *capabilityEvidence{nullptr};
 };
 
+// These predicates are the sole foundation authorization checks for optional
+// control MSRs. They deliberately do not decide applicability or enforcement.
+constexpr bool canReadArchCapabilities(const CapabilitySnapshot &snapshot) {
+	return snapshot.vendor == CpuVendor::intel && snapshot.haveArchCapabilities;
+}
+
+constexpr bool canWriteIbrs(const CapabilitySnapshot &snapshot) {
+	return snapshot.haveIbrs;
+}
+
+constexpr bool canWriteStibp(const CapabilitySnapshot &snapshot) {
+	return snapshot.haveStibp;
+}
+
+constexpr bool canWriteSsbd(const CapabilitySnapshot &snapshot) {
+	return snapshot.haveSsbd;
+}
+
+constexpr bool canAccessSpeculationControl(const CapabilitySnapshot &snapshot) {
+	return canWriteIbrs(snapshot) || canWriteStibp(snapshot) || canWriteSsbd(snapshot);
+}
+
+constexpr bool canIssuePredictorBarrier(const CapabilitySnapshot &snapshot) {
+	return snapshot.haveIbpb;
+}
+
+constexpr bool canClearCpuBuffers(const CapabilitySnapshot &snapshot) {
+	return snapshot.haveMdClear;
+}
+
 // Must run locally before VMXON/SVME and before this CPU becomes schedulable.
 void discoverThisCpuCapabilities();
 
@@ -74,6 +104,7 @@ bool cpuCapabilitySetFinalized();
 
 const security::Evidence &intelCpuidEvidence();
 const security::Evidence &amdCpuidEvidence();
+const security::EvidenceRegistry &evidenceRegistry();
 
 initgraph::Stage *getSecurityPolicyFrozenStage();
 
