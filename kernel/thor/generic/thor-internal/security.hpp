@@ -211,10 +211,11 @@ private:
 // and off/disable.
 PolicyParseError parsePolicy(frg::string_view commandLine, Policy &policy);
 
-// Future mitigation modules must call this before policy freeze for their own
-// exact selector, speculation_security.<mitigation>=auto|enable|disable. They
-// initialize policy from Policy::mitigation(), preserving the global default.
-// Other modules' selectors are deliberately ignored.
+// Future mitigation modules copy the frozen Policy::mitigation() value and
+// call this for their own exact selector,
+// speculation_security.<mitigation>=auto|enable|disable. This preserves the
+// global default without allowing a module to mutate shared policy after
+// freeze. Other modules' selectors are deliberately ignored.
 PolicyParseError parseMitigationPolicy(frg::string_view commandLine,
 		frg::string_view mitigation, MitigationPolicy &policy);
 
