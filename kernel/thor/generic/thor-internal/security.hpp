@@ -1,6 +1,7 @@
 #pragma once
 
 #include <frg/array.hpp>
+#include <frg/string.hpp>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -124,6 +125,13 @@ struct BoundaryPolicy {
 	PolicySource source{PolicySource::defaultValue};
 };
 
+enum class PolicyParseError : uint8_t {
+	success,
+	malformedOption,
+	invalidValue,
+	conflictingOption
+};
+
 // This is intentionally a typed policy representation, rather than a command
 // line parser. Option spelling and defaults are a separate policy decision.
 class Policy {
@@ -174,6 +182,18 @@ private:
 	frg::array<BoundaryPolicy, numTrustBoundaries> boundaries_{};
 	bool frozen_{false};
 };
+
+// Parses the global speculation_security option and ignores unrelated command
+// line words. The default is automatic. Accepted values are auto, on/enable,
+// and off/disable.
+PolicyParseError parsePolicy(frg::string_view commandLine, Policy &policy);
+
+// Future mitigation modules must call this before policy freeze for their own
+// exact selector, speculation_security.<mitigation>=auto|enable|disable. They
+// initialize policy from Policy::mitigation(), preserving the global default.
+// Other modules' selectors are deliberately ignored.
+PolicyParseError parseMitigationPolicy(frg::string_view commandLine,
+		frg::string_view mitigation, MitigationPolicy &policy);
 
 struct DecisionInputs {
 	Applicability applicability{Applicability::unknown};

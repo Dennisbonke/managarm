@@ -136,7 +136,12 @@ initgraph::Stage *getSecurityPolicyFrozenStage() {
 static initgraph::Task freezeSecurityPolicyTask{&globalInitEngine, "x86.freeze-security-policy",
 		initgraph::Entails{getSecurityPolicyFrozenStage()}, [] {
 		// thorMain() initializes the command line before the init graph runs.
-		security::architectureState().freezePolicy();
+		auto &state = security::architectureState();
+		auto error = security::parsePolicy(getKernelCmdline(), state.policy());
+		if(error != security::PolicyParseError::success)
+			panicLogger() << "thor: invalid speculation_security command-line policy: "
+					<< static_cast<unsigned int>(error) << frg::endlog;
+		state.freezePolicy();
 	}};
 
 void discoverThisCpuCapabilities() {
