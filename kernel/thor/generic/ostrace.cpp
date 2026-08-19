@@ -282,8 +282,6 @@ void setup() {
 		commitOsTrace(std::move(record));
 	};
 
-	setupTerm(ostEvtArmPreemption);
-	setupTerm(ostEvtArmCpuTimer);
 	available.store(true, std::memory_order_relaxed);
 }
 
@@ -292,12 +290,5 @@ void emitBuffer(frg::span<char> payload) {
 }
 
 } // namespace ostrace
-
-// --------------------------------------------------------------------------------------
-// Kernel ostrace events.
-// --------------------------------------------------------------------------------------
-
-ostrace::Event ostEvtArmPreemption{"thor.arm-preemption"};
-ostrace::Event ostEvtArmCpuTimer{"thor.arm-cpu-timer"};
 
 } // namespace thor
