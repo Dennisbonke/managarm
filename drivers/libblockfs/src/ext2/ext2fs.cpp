@@ -795,7 +795,9 @@ Inode::resizeFile(size_t newSize) {
 		// TODO(qookie): Technically we only need to assign 0
 		// blocks here, not allocate new ones. We also should
 		// zero out the new blocks.
-		FRG_CO_TRY(co_await ensureBackingBlocks(oldSize, newSize - oldSize));
+		auto allocatedSize = (oldSize + fs.blockSize - 1) & ~(fs.blockSize - 1);
+		if (newSize > allocatedSize)
+			FRG_CO_TRY(co_await ensureBackingBlocks(allocatedSize, newSize - allocatedSize));
 	} else if (newSize < oldSize) {
 		// TODO(qookie): Deallocate blocks if they're no longer within the file.
 		std::println("libblockfs: Shrinking an Ext2 file does not free data blocks!");
