@@ -15,7 +15,6 @@
 #include <core/logging.hpp>
 #include <helix/ipc.hpp>
 #include <helix/memory.hpp>
-#include <helix/timer.hpp>
 
 #include <array>
 #include <bit>
@@ -23,6 +22,9 @@
 #include "ext2fs.hpp"
 #include "extents.hpp"
 #include "../checksums.hpp"
+#include "../trace.hpp"
+
+#include <helix/timer.hpp>
 
 namespace blockfs {
 namespace ext2fs {
@@ -797,8 +799,15 @@ Inode::resizeFile(size_t newSize) {
 		// blocks here, not allocate new ones. We also should
 		// zero out the new blocks.
 		auto allocatedSize = (oldSize + fs.blockSize - 1) & ~(fs.blockSize - 1);
-		if (newSize > allocatedSize)
+		if (newSize > allocatedSize) {
+			protocols::ostrace::Timer ensureBlocksTimer;
 			FRG_CO_TRY(co_await ensureBackingBlocks(allocatedSize, newSize - allocatedSize));
+			ostContext.emit(
+				ostEvtExt2ResizeEnsureBlocks,
+				ostAttrNumBytes(newSize - allocatedSize),
+				ostAttrTime(ensureBlocksTimer.elapsed())
+			);
+		}
 	} else if (newSize < oldSize) {
 		// TODO(qookie): Deallocate blocks if they're no longer within the file.
 		std::println("libblockfs: Shrinking an Ext2 file does not free data blocks!");
@@ -810,18 +819,30 @@ Inode::resizeFile(size_t newSize) {
 	auto oldMappingSize = (oldSize + 0xFFF) & ~size_t(0xFFF);
 	auto newMappingSize = (newSize + 0xFFF) & ~size_t(0xFFF);
 	if (newMappingSize != oldMappingSize) {
+		protocols::ostrace::Timer resizeMemoryTimer;
 		auto resizeResult = co_await helix_ng::resizeMemory(
 				helix::BorrowedDescriptor{backingMemory}, newMappingSize);
 		HEL_CHECK(resizeResult.error());
+		ostContext.emit(
+			ostEvtExt2ResizeMemory,
+			ostAttrNumBytes(newMappingSize),
+			ostAttrTime(resizeMemoryTimer.elapsed())
+		);
 	}
 	setFileSize(newSize);
 
 	updateInodeChecksum(fs, diskInode(), number);
 
+	protocols::ostrace::Timer syncInodeTimer;
 	auto syncInode = co_await helix_ng::synchronizeSpace(
 		helix::BorrowedDescriptor{kHelNullHandle},
 		diskInode(), fs.inodeSize);
 	HEL_CHECK(syncInode.error());
+	ostContext.emit(
+		ostEvtExt2ResizeSyncInode,
+		ostAttrNumBytes(fs.inodeSize),
+		ostAttrTime(syncInodeTimer.elapsed())
+	);
 
 	co_return frg::success;
 }
@@ -1392,14 +1413,40 @@ async::detached FileSystem::manageFileData(std::shared_ptr<Inode> inode) {
 			assert(numBlocks * inode->fs.blockSize <= manage.length());
 
 			{
+				protocols::ostrace::Timer waitBlockMapTimer;
 				co_await inode->blockMapMutex.async_lock();
 				frg::unique_lock blockMapLock{frg::adopt_lock, inode->blockMapMutex};
+				ostContext.emit(
+					ostEvtExt2ManageFileWaitBlockMap,
+					ostAttrNumBytes(manage.length()),
+					ostAttrTime(waitBlockMapTimer.elapsed())
+				);
+
+				protocols::ostrace::Timer assignBlocksTimer;
 				co_await inode->fs.assignDataBlocks(inode.get(), blockOffset, numBlocks);
+				ostContext.emit(
+					ostEvtExt2ManageFileAssignBlocks,
+					ostAttrNumBytes(manage.length()),
+					ostAttrTime(assignBlocksTimer.elapsed())
+				);
+
+				protocols::ostrace::Timer writeDataTimer;
 				co_await inode->fs.writeDataBlocks(inode, blockOffset, fileView);
+				ostContext.emit(
+					ostEvtExt2ManageFileWriteData,
+					ostAttrNumBytes(manage.length()),
+					ostAttrTime(writeDataTimer.elapsed())
+				);
 			}
 
+			protocols::ostrace::Timer updateMemoryTimer;
 			HEL_CHECK(helUpdateMemory(inode->backingMemory, kHelManageWriteback,
 					manage.offset(), manage.length()));
+			ostContext.emit(
+				ostEvtExt2ManageFileUpdateMemory,
+				ostAttrNumBytes(manage.length()),
+				ostAttrTime(updateMemoryTimer.elapsed())
+			);
 		}
 
 		ostContext.emit(
@@ -1987,13 +2034,25 @@ async::result<void> FileSystem::writeDataBlocksUsingExtents(std::shared_ptr<Inod
 	// TODO: Assert that we do not read past the EOF.
 
 	size_t num_blocks = buf.size() >> blockShift;
+	protocols::ostrace::Timer lookupTimer;
 	auto blockRanges = co_await lookupBlocksUsingExtent(inode.get(), block_offset, num_blocks, true);
+	ostContext.emit(
+		ostEvtExt2WriteDataLookup,
+		ostAttrNumBytes(buf.size()),
+		ostAttrTime(lookupTimer.elapsed())
+	);
 
 	size_t progress = 0;
 	for(auto &range : blockRanges) {
+		protocols::ostrace::Timer writeSectorsTimer;
 		co_await device->writeSectors(
 		    range.absoluteStartBlock * sectorsPerBlock,
 		    buf.subview(progress * blockSize, range.size * blockSize)
+		);
+		ostContext.emit(
+			ostEvtExt2WriteDataSectors,
+			ostAttrNumBytes(range.size * blockSize),
+			ostAttrTime(writeSectorsTimer.elapsed())
 		);
 		progress += range.size;
 	}
@@ -2336,6 +2395,7 @@ async::result<void> FileSystem::writeDataBlocks(std::shared_ptr<Inode> inode,
 	while(progress < num_blocks) {
 		// Block number and block count of the writeSectors() command that we will issue here.
 		std::pair<size_t, size_t> issue;
+		protocols::ostrace::Timer lookupTimer;
 
 		auto index = offset + progress;
 //		std::cout << "Write " << index << "-th block to inode " << inode->number
@@ -2375,14 +2435,25 @@ async::result<void> FileSystem::writeDataBlocks(std::shared_ptr<Inode> inode,
 			issue = fuse(index, num_blocks - progress,
 					disk_inode->data.blocks.direct, 12);
 		}
+		ostContext.emit(
+			ostEvtExt2WriteDataLookup,
+			ostAttrNumBytes((num_blocks - progress) * blockSize),
+			ostAttrTime(lookupTimer.elapsed())
+		);
 
 //		std::cout << "Issuing write of " << issue.second
 //				<< " blocks, starting at " << issue.first << std::endl;
 
 		assert(issue.first);
+		protocols::ostrace::Timer writeSectorsTimer;
 		co_await device->writeSectors(
 		    issue.first * sectorsPerBlock,
 		    buf.subview(progress * blockSize, issue.second * blockSize)
+		);
+		ostContext.emit(
+			ostEvtExt2WriteDataSectors,
+			ostAttrNumBytes(issue.second * blockSize),
+			ostAttrTime(writeSectorsTimer.elapsed())
 		);
 		progress += issue.second;
 	}
@@ -2443,4 +2514,3 @@ OpenFile::readEntries() {
 }
 
 } } // namespace blockfs::ext2fs
-

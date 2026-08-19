@@ -141,15 +141,28 @@ doWriteImpl(T *inode, const void *buffer, size_t length, bool append, auto &offs
 	if (append)
 		offset = inode->fileSize();
 	auto requiredSize = offset + length;
-	if (requiredSize > inode->fileSize())
+	if (requiredSize > inode->fileSize()) {
+		protocols::ostrace::Timer resizeTimer;
 		FRG_CO_TRY(co_await inode->resizeFile(requiredSize));
+		ostContext.emit(
+			ostEvtWriteResizeFile,
+			ostAttrNumBytes(length),
+			ostAttrTime(resizeTimer.elapsed())
+		);
+	}
 
 	// TODO: Add a recvToMemory action to exchangeMsgs to avoid
 	// having to copy this data twice.
+	protocols::ostrace::Timer copyTimer;
 	auto writeMemory = co_await helix_ng::writeMemory(
 		inode->accessMemory(),
 		offset, length, buffer);
 	HEL_CHECK(writeMemory.error());
+	ostContext.emit(
+		ostEvtWriteCopyToCache,
+		ostAttrNumBytes(length),
+		ostAttrTime(copyTimer.elapsed())
+	);
 
 	offset += length;
 
