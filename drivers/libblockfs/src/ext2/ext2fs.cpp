@@ -806,10 +806,13 @@ Inode::resizeFile(size_t newSize) {
 		co_return frg::success;
 	}
 
-	auto resizeResult = co_await helix_ng::resizeMemory(
-			helix::BorrowedDescriptor{backingMemory},
-			(newSize + 0xFFF) & ~size_t(0xFFF));
-	HEL_CHECK(resizeResult.error());
+	auto oldMappingSize = (oldSize + 0xFFF) & ~size_t(0xFFF);
+	auto newMappingSize = (newSize + 0xFFF) & ~size_t(0xFFF);
+	if (newMappingSize != oldMappingSize) {
+		auto resizeResult = co_await helix_ng::resizeMemory(
+				helix::BorrowedDescriptor{backingMemory}, newMappingSize);
+		HEL_CHECK(resizeResult.error());
+	}
 	setFileSize(newSize);
 
 	updateInodeChecksum(fs, diskInode(), number);
