@@ -15,6 +15,7 @@
 #include <core/logging.hpp>
 #include <helix/ipc.hpp>
 #include <helix/memory.hpp>
+#include <helix/timer.hpp>
 
 #include <array>
 #include <bit>
@@ -960,9 +961,20 @@ async::result<void> FileSystem::init() {
 async::detached FileSystem::handleBgdtWriteback() {
 	while(true) {
 		co_await bdgtWriteback.async_wait();
+		co_await helix::sleepFor(1'000'000);
 
 		co_await allocationMutex.async_lock();
 		frg::unique_lock allocationLock{frg::adopt_lock, allocationMutex};
+		std::unordered_set<uint32_t> dirtyBitmaps;
+		dirtyBitmaps.swap(dirtyBlockBitmaps);
+
+		for(auto bg_idx : dirtyBitmaps) {
+			auto bitmap = reinterpret_cast<std::byte *>(blockBitmapMapping.get())
+					+ (bg_idx << blockPagesShift);
+			auto syncBitmap = co_await helix_ng::synchronizeSpace(
+					helix::BorrowedDescriptor{kHelNullHandle}, bitmap, 1 << blockPagesShift);
+			HEL_CHECK(syncBitmap.error());
+		}
 
 		auto bgdt_offset = (2048 + blockSize - 1) & ~size_t(blockSize - 1);
 		co_await device->writeSectors((bgdt_offset >> blockShift) * sectorsPerBlock,
@@ -1400,6 +1412,10 @@ async::detached FileSystem::manageFileData(std::shared_ptr<Inode> inode) {
 async::result<std::vector<uint32_t>> FileSystem::allocateBlocks(size_t num, std::optional<uint32_t> ino) {
 	protocols::ostrace::Timer timer;
 	std::vector<uint32_t> result;
+	auto markBitmapDirty = [&](uint32_t bg_idx) {
+		dirtyBlockBitmaps.insert(bg_idx);
+		bdgtWriteback.raise();
+	};
 
 	co_await allocationMutex.async_lock();
 	frg::unique_lock allocationLock{frg::adopt_lock, allocationMutex};
@@ -1441,10 +1457,7 @@ async::result<std::vector<uint32_t>> FileSystem::allocateBlocks(size_t num, std:
 						updateBlockBitmapChecksum(*this, &bgdt[preferred_bg], words, blockSize);
 						updateBlockGroupChecksum(*this, &bgdt[preferred_bg], preferred_bg);
 
-						auto syncBitmap = co_await helix_ng::synchronizeSpace(
-								helix::BorrowedDescriptor{kHelNullHandle},
-								words, 1 << blockPagesShift);
-						HEL_CHECK(syncBitmap.error());
+						markBitmapDirty(preferred_bg);
 
 						ostContext.emit(
 							ostEvtExt2AllocateBlocks,
@@ -1459,10 +1472,7 @@ async::result<std::vector<uint32_t>> FileSystem::allocateBlocks(size_t num, std:
 				updateBlockBitmapChecksum(*this, &bgdt[preferred_bg], words, blockSize);
 				updateBlockGroupChecksum(*this, &bgdt[preferred_bg], preferred_bg);
 
-				auto syncBitmap = co_await helix_ng::synchronizeSpace(
-						helix::BorrowedDescriptor{kHelNullHandle},
-						words, 1 << blockPagesShift);
-				HEL_CHECK(syncBitmap.error());
+				markBitmapDirty(preferred_bg);
 			}
 		}
 	}
@@ -1502,10 +1512,7 @@ async::result<std::vector<uint32_t>> FileSystem::allocateBlocks(size_t num, std:
 					updateBlockBitmapChecksum(*this, &bgdt[bg_idx], words, blockSize);
 					updateBlockGroupChecksum(*this, &bgdt[bg_idx], bg_idx);
 
-					auto syncBitmap = co_await helix_ng::synchronizeSpace(
-							helix::BorrowedDescriptor{kHelNullHandle},
-							words, 1 << blockPagesShift);
-					HEL_CHECK(syncBitmap.error());
+					markBitmapDirty(bg_idx);
 
 					ostContext.emit(
 						ostEvtExt2AllocateBlocks,
@@ -1519,10 +1526,7 @@ async::result<std::vector<uint32_t>> FileSystem::allocateBlocks(size_t num, std:
 		updateBlockBitmapChecksum(*this, &bgdt[bg_idx], words, blockSize);
 		updateBlockGroupChecksum(*this, &bgdt[bg_idx], bg_idx);
 
-		auto syncBitmap = co_await helix_ng::synchronizeSpace(
-				helix::BorrowedDescriptor{kHelNullHandle},
-				words, 1 << blockPagesShift);
-		HEL_CHECK(syncBitmap.error());
+		markBitmapDirty(bg_idx);
 	}
 
 	assert(!"Failed to find zero-bit");

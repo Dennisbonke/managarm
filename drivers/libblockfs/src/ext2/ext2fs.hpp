@@ -582,6 +582,8 @@ struct FileSystem final : BaseFileSystem {
 
 	// Serializes block/inode allocation and BGDT modifications.
 	async::mutex allocationMutex;
+	// Protected by allocationMutex. Bitmap pages awaiting background writeback.
+	std::unordered_set<uint32_t> dirtyBlockBitmaps;
 
 	// Protected by activeInodesMutex.
 	std::unordered_map<uint32_t, std::weak_ptr<Inode>> activeInodes;
