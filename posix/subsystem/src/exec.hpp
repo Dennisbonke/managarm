@@ -6,6 +6,7 @@ constexpr size_t kExecStackSize = 0x200000;
 
 struct ExecuteResult {
 	helix::UniqueDescriptor thread;
+	std::string path;
 	void *auxBegin = nullptr;
 	void *auxEnd = nullptr;
 	uid_t effectiveUid = 0;

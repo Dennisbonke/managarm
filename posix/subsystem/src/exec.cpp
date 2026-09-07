@@ -612,6 +612,7 @@ execute(ViewPath root, ViewPath workdir,
 
 	co_return ExecuteResult{
 		.thread = helix::UniqueDescriptor{thread},
+		.path = ViewPath{execFile->associatedMount(), execFile->associatedLink()}.getPath(root),
 		.auxBegin = auxBegin,
 		.auxEnd = auxEnd,
 		.effectiveUid = newUid,
