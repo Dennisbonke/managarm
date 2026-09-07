@@ -6,6 +6,7 @@
 #include <sys/auxv.h>
 #include <iostream>
 #include <limits>
+#include <optional>
 
 #include "vfs.hpp"
 #include "exec.hpp"
@@ -54,6 +55,7 @@ struct ValidatedProgramHeader {
 struct ValidatedElf {
 	Elf64_Ehdr header;
 	std::vector<ValidatedProgramHeader> phdrs;
+	std::optional<uint64_t> phdrVaddr;
 };
 
 // This struct contains the image meta data with correct base address applied.
@@ -123,6 +125,8 @@ parseElf(SharedFilePtr file) {
 			phdrBuffer.data(), phdrBuffer.size()));
 
 	bool hasLoadSegment = false;
+	bool hasExplicitPhdr = false;
+	bool ambiguousPhdr = false;
 	for(size_t i = 0; i < elf.header.e_phnum; i++) {
 		ValidatedProgramHeader validated;
 		memcpy(&validated.header, phdrBuffer.data() + i * sizeof(Elf64_Phdr),
@@ -182,17 +186,36 @@ parseElf(SharedFilePtr file) {
 
 			validated.fileOffset = static_cast<size_t>(fileOffset);
 			validated.mapLength = static_cast<size_t>(mapLength);
+
+			if(elf.header.e_phoff >= phdr.p_offset) {
+				uint64_t tableOffset = elf.header.e_phoff - phdr.p_offset;
+				if(tableOffset <= phdr.p_filesz
+						&& phdrSize <= phdr.p_filesz - tableOffset) {
+					uint64_t phdrVaddr;
+					if(!checkedAdd(phdr.p_vaddr, tableOffset, phdrVaddr))
+						co_return Error::badExecutable;
+					if(elf.phdrVaddr) {
+						if(*elf.phdrVaddr != phdrVaddr)
+							ambiguousPhdr = true;
+					}else{
+						elf.phdrVaddr = phdrVaddr;
+					}
+				}
+			}
 		}
 
 		if(phdr.p_type == PT_INTERP
 				&& (!phdr.p_filesz || phdr.p_filesz > kMaxInterpreterSize))
 			co_return Error::badExecutable;
+
+		if(phdr.p_type == PT_PHDR)
+			hasExplicitPhdr = true;
 		}
 
 		elf.phdrs.push_back(std::move(validated));
 	}
 
-	if(!hasLoadSegment)
+	if(!hasLoadSegment || (ambiguousPhdr && !hasExplicitPhdr))
 		co_return Error::badExecutable;
 
 	co_return elf;
@@ -203,6 +226,7 @@ loadElfImage(SharedFilePtr file, const ValidatedElf &elf,
 		VmContext *vmContext, uintptr_t base) {
 	assert(!(base & (kPageSize - 1))); // Callers need to ensure this.
 	ImageInfo info;
+	bool hasPhdr = false;
 
 	// Get a handle to the file's memory.
 	auto fileMemory = co_await file->accessMemory();
@@ -294,6 +318,7 @@ loadElfImage(SharedFilePtr file, const ValidatedElf &elf,
 			if(!addBase(phdr.p_vaddr, phdrPtr))
 				co_return Error::badExecutable;
 			info.phdrPtr = reinterpret_cast<void *>(phdrPtr);
+			hasPhdr = true;
 		}else if(phdr.p_type == PT_INTERP) {
 			info.interpreter.resize(static_cast<size_t>(phdr.p_filesz));
 			FRG_CO_TRY(co_await file->seek(phdr.p_offset, VfsSeek::absolute));
@@ -312,7 +337,13 @@ loadElfImage(SharedFilePtr file, const ValidatedElf &elf,
 			std::cout << "posix: Unexpected PHDR type " << phdr.p_type << std::endl;
 		}
 	}
-
+	if(!hasPhdr && elf.phdrVaddr) {
+		uintptr_t phdrPtr;
+		if(!addBase(*elf.phdrVaddr, phdrPtr))
+			co_return Error::badExecutable;
+		info.phdrPtr = reinterpret_cast<void *>(phdrPtr);
+		hasPhdr = true;
+	}
 	co_return info;
 }
 

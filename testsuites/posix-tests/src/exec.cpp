@@ -208,6 +208,28 @@ DEFINE_TEST(exec_ignores_unused_program_headers, ([] {
 		});
 }))
 
+DEFINE_TEST(exec_uses_explicit_pt_phdr_for_ambiguous_loads, ([] {
+	expectExecError(1, 1, 0, "/does/not/exist", ENOENT, true, ET_EXEC,
+		nullptr, 0, nullptr, 2, [](Elf64_Ehdr &, std::vector<Elf64_Phdr> &phdrs) {
+			phdrs[0].p_offset = 0;
+			phdrs[0].p_vaddr = 0;
+			phdrs[0].p_filesz = 0x1000;
+			phdrs[0].p_memsz = 0x1000;
+
+			phdrs[2].p_type = PT_LOAD;
+			phdrs[2].p_flags = PF_R | PF_W;
+			phdrs[2].p_offset = 0;
+			phdrs[2].p_vaddr = 0x2000;
+			phdrs[2].p_filesz = 0x1000;
+			phdrs[2].p_memsz = 0x1000;
+
+			phdrs[3].p_type = PT_PHDR;
+			phdrs[3].p_offset = sizeof(Elf64_Ehdr);
+			phdrs[3].p_vaddr = 0x2064;
+			phdrs[3].p_filesz = 4 * sizeof(Elf64_Phdr);
+		});
+}))
+
 DEFINE_TEST(exec_rejects_invalid_pt_interp, ([] {
 	expectExecError(1, 1, 0, "/does/not/exist", ENOEXEC, true, ET_EXEC,
 		nullptr, 0, [](Elf64_Phdr &phdr) {
