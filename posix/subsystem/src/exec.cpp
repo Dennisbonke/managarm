@@ -293,23 +293,70 @@ execute(ViewPath root, ViewPath workdir,
 	uid_t newUid = hasSetuid ? stats.uid : self->threadGroup()->euid();
 	gid_t newGid = hasSetgid ? stats.gid : self->threadGroup()->egid();
 
-	constexpr size_t stackSize = 0x200000;
+	size_t stackImageSize = 0;
+	constexpr auto maxSize = std::numeric_limits<size_t>::max();
+	auto addStackSize = [&] (size_t size) {
+		if(size > maxSize - stackImageSize)
+			return false;
+		stackImageSize += size;
+		return true;
+	};
+	auto addStringSize = [&] (const std::string &str) {
+		if(str.size() == maxSize)
+			return false;
+		return addStackSize(str.size() + 1);
+	};
+
+	if(!addStringSize(path))
+		co_return Error::argumentListTooLong;
+	for(const auto &str : args) {
+		if(!addStringSize(str))
+			co_return Error::argumentListTooLong;
+	}
+	for(const auto &str : env) {
+		if(!addStringSize(str))
+			co_return Error::argumentListTooLong;
+	}
+
+	// Account for string alignment, the fixed auxv and argv/envp words.
+	if(!addStackSize(alignof(uintptr_t)))
+		co_return Error::argumentListTooLong;
+	if(!addStackSize(15))
+		co_return Error::argumentListTooLong;
+
+	size_t wordCount = 3;
+	if(args.size() > maxSize - wordCount)
+		co_return Error::argumentListTooLong;
+	wordCount += args.size();
+	if(env.size() > maxSize - wordCount)
+		co_return Error::argumentListTooLong;
+	wordCount += env.size();
+	if(wordCount & 1) {
+		if(wordCount == maxSize)
+			co_return Error::argumentListTooLong;
+		wordCount++;
+	}
+	if(wordCount > maxSize / sizeof(uintptr_t)
+			|| !addStackSize(wordCount * sizeof(uintptr_t))
+			|| !addStackSize(18 * sizeof(uintptr_t))
+			|| stackImageSize > kExecStackSize)
+		co_return Error::argumentListTooLong;
 
 	// Allocate memory for the stack.
 	HelHandle stackHandle;
-	HEL_CHECK(helAllocateMemory(stackSize, kHelAllocOnDemand, nullptr, &stackHandle));
+	HEL_CHECK(helAllocateMemory(kExecStackSize, kHelAllocOnDemand, nullptr, &stackHandle));
 
 	void *window;
 	HEL_CHECK(helMapMemory(stackHandle, kHelNullHandle, nullptr,
-			0, stackSize, kHelMapProtRead | kHelMapProtWrite, &window));
+			0, kExecStackSize, kHelMapProtRead | kHelMapProtWrite, &window));
 
 	// Map the stack into the new process and set it up.
 	void *stackBase = FRG_CO_TRY(co_await vmContext->mapFile(0,
 			helix::UniqueDescriptor{stackHandle}, nullptr,
-			0, stackSize, true, kHelMapProtRead | kHelMapProtWrite));
+			0, kExecStackSize, true, kHelMapProtRead | kHelMapProtWrite));
 
 	// the offset at which the stack image starts.
-	size_t d = stackSize;
+	size_t d = kExecStackSize;
 
 	// Copy argument and environment strings to the stack.
 	auto pushString = [&] (const std::string &str) -> uintptr_t {
@@ -378,7 +425,7 @@ execute(ViewPath root, ViewPath workdir,
 	// Stack has to be aligned at entry.
 	assert(!(d & size_t(15)));
 
-	HEL_CHECK(helUnmapMemory(kHelNullHandle, window, stackSize));
+	HEL_CHECK(helUnmapMemory(kHelNullHandle, window, kExecStackSize));
 
 	HelHandle thread;
 	HEL_CHECK(helCreateThread(universe.getHandle(),
