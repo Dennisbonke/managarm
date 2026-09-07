@@ -140,13 +140,12 @@ void expectExecError(uint64_t filesz, uint64_t memsz, uint64_t align,
 	assert(unlink(path) == 0);
 }
 
-void expectNonShebangError(const char *prefix) {
-	char path[] = "/tmp/posix-tests-nonshebang-XXXXXX";
+void expectTextExecError(const char *contents, size_t length) {
+	char path[] = "/tmp/posix-tests-script-XXXXXX";
 	int fd = mkstemp(path);
 	assert(fd >= 0);
 
-	char contents[] = {prefix[0], prefix[1], '\n'};
-	assert(write(fd, contents, sizeof(contents)) == sizeof(contents));
+	assert(write(fd, contents, length) == static_cast<ssize_t>(length));
 	assert(fchmod(fd, 0700) == 0);
 	assert(close(fd) == 0);
 
@@ -168,6 +167,11 @@ void expectNonShebangError(const char *prefix) {
 	assert(WIFEXITED(status));
 	assert(WEXITSTATUS(status) == EXIT_SUCCESS);
 	assert(unlink(path) == 0);
+}
+
+void expectNonShebangError(const char *prefix) {
+	char contents[] = {prefix[0], prefix[1], '\n'};
+	expectTextExecError(contents, sizeof(contents));
 }
 
 }
@@ -256,6 +260,11 @@ DEFINE_TEST(exec_rejects_invalid_elf_type, ([] {
 DEFINE_TEST(exec_rejects_partial_shebang_prefix, ([] {
 	expectNonShebangError("#a");
 	expectNonShebangError("x!");
+}))
+
+DEFINE_TEST(exec_rejects_whitespace_only_shebang, ([] {
+	constexpr char contents[] = "#!     \n";
+	expectTextExecError(contents, sizeof(contents) - 1);
 }))
 
 DEFINE_TEST(exec_rejects_invalid_elf_metadata, ([] {
