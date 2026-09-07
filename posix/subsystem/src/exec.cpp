@@ -368,9 +368,9 @@ execute(ViewPath root, ViewPath workdir,
 				std::cout << "posix: EOF in shebang line" << std::endl;
 				co_return Error::badExecutable;
 			}
-			auto nlPtr = std::find(buffer, buffer + 128, '\n');
+			auto nlPtr = std::find(buffer, buffer + chunk, '\n');
 			shebangStr.insert(shebangStr.end(), buffer, nlPtr);
-			if(nlPtr != buffer + 128)
+			if(nlPtr != buffer + chunk)
 				break;
 		}
 
