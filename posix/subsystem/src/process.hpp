@@ -813,7 +813,7 @@ struct ThreadGroup : std::enable_shared_from_this<ThreadGroup> {
 		if(euid < 0) {
 			return Error::illegalArguments;
 		}
-		if(isRoot() || euid == _uid) {
+		if(isRoot() || euid == _uid || euid == _suid) {
 			_euid = euid;
 			return Error::success;
 		}
@@ -849,7 +849,7 @@ struct ThreadGroup : std::enable_shared_from_this<ThreadGroup> {
 		if(egid < 0) {
 			return Error::illegalArguments;
 		}
-		if(isRoot() || _gid == egid || _egid == egid) {
+		if(isRoot() || _gid == egid || _egid == egid || _sgid == egid) {
 			_egid = egid;
 			return Error::success;
 		}
