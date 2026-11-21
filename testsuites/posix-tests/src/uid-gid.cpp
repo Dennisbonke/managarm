@@ -194,6 +194,28 @@ void run_in_child(F &&function) {
 	assert(WEXITSTATUS(status) == EXIT_SUCCESS);
 }
 
+// Start each regression with real and saved UID 0, but no effective root
+// privilege. Dropping only EUID clears effective capabilities on normal Linux.
+// Choose IDs before forking so unsupported namespaces can skip in the parent.
+template<typename F>
+void run_with_real_root_only(F &&function) {
+	if(geteuid() != 0)
+		skip_test("requires effective UID 0");
+
+	uid_t dropped;
+	uid_t unrelated;
+	if(!choose_other("/proc/self/uid_map", uid_t{0}, uid_t{0}, uid_t{0}, dropped)
+			|| !choose_other("/proc/self/uid_map", uid_t{0}, dropped, dropped, unrelated))
+		skip_test("requires two alternative mapped UIDs");
+
+	run_in_child([&] {
+		const auto result = setresuid(0, dropped, 0);
+		assert(result == 0);
+		assert_uid_state({0, dropped, 0});
+		function(dropped, unrelated);
+	});
+}
+
 } // namespace
 
 DEFINE_TEST(getresuid, ([] {
@@ -340,7 +362,7 @@ DEFINE_TEST(setreuid, ([] {
 			before.saved, other))
 		skip_test("no alternative mapped UID");
 
-	const bool privileged = before.real == 0 || before.effective == 0;
+	const bool privileged = before.effective == 0;
 	run_in_child([=] {
 		const auto noChangeResult = setreuid(no_change_id<uid_t>(), no_change_id<uid_t>());
 		assert(noChangeResult == 0);
@@ -370,7 +392,7 @@ DEFINE_TEST(setregid, ([] {
 			before.saved, other))
 		skip_test("no alternative mapped GID");
 
-	const bool privileged = uidState.real == 0 || uidState.effective == 0;
+	const bool privileged = uidState.effective == 0;
 	run_in_child([=] {
 		const auto noChangeResult = setregid(no_change_id<gid_t>(), no_change_id<gid_t>());
 		assert(noChangeResult == 0);
@@ -399,7 +421,7 @@ DEFINE_TEST(setresuid, ([] {
 			before.saved, other))
 		skip_test("no alternative mapped UID");
 
-	const bool privileged = before.real == 0 || before.effective == 0;
+	const bool privileged = before.effective == 0;
 	run_in_child([=] {
 		const auto noChangeResult = setresuid(no_change_id<uid_t>(), no_change_id<uid_t>(),
 				no_change_id<uid_t>());
@@ -446,7 +468,7 @@ DEFINE_TEST(setresgid, ([] {
 			before.saved, other))
 		skip_test("no alternative mapped GID");
 
-	const bool privileged = uidState.real == 0 || uidState.effective == 0;
+	const bool privileged = uidState.effective == 0;
 	run_in_child([=] {
 		const auto noChangeResult = setresgid(no_change_id<gid_t>(), no_change_id<gid_t>(),
 				no_change_id<gid_t>());
@@ -469,6 +491,191 @@ DEFINE_TEST(setresgid, ([] {
 			const auto setResgidResult = setresgid(other, no_change_id<gid_t>(),
 					no_change_id<gid_t>());
 			assert_permission_failure(setResgidResult);
+			assert_gid_state(before);
+		}
+	});
+}))
+
+DEFINE_TEST(seteuid_real_effective_saved, ([] {
+	run_with_real_root_only([](uid_t dropped, uid_t unrelated) {
+		const auto setEuidResult = seteuid(dropped);
+		assert(setEuidResult == 0);
+		assert_uid_state({0, dropped, 0});
+		errno = 0;
+		const auto setEuidResult2 = seteuid(unrelated);
+		assert_permission_failure(setEuidResult2);
+		assert_uid_state({0, dropped, 0});
+
+		const auto setEuidResult3 = seteuid(0);
+		assert(setEuidResult3 == 0); // Real UID.
+		assert_uid_state({0, 0, 0});
+		const auto setEuidResult4 = seteuid(dropped);
+		assert(setEuidResult4 == 0);
+		const auto setResuidResult = setresuid(dropped, dropped, 0);
+		assert(setResuidResult == 0);
+		const auto setEuidResult5 = seteuid(0);
+		assert(setEuidResult5 == 0); // Saved UID only.
+		assert_uid_state({dropped, 0, 0});
+	});
+}))
+
+DEFINE_TEST(setegid_real_effective_saved, ([] {
+	if(geteuid() != 0)
+		skip_test("requires effective UID 0");
+	const auto before = get_gid_state();
+	uid_t dropped;
+	gid_t effective;
+	gid_t saved;
+	if(!choose_other("/proc/self/uid_map", uid_t{0}, uid_t{0}, uid_t{0}, dropped)
+			|| !choose_other("/proc/self/gid_map", before.real, before.real, before.real, effective)
+			|| !choose_other("/proc/self/gid_map", before.real, effective, effective, saved))
+		skip_test("requires an alternative mapped UID and two alternative mapped GIDs");
+
+	run_in_child([=] {
+		const auto setResgidResult = setresgid(before.real, effective, saved);
+		assert(setResgidResult == 0);
+		const auto setResuidResult = setresuid(0, dropped, 0);
+		assert(setResuidResult == 0);
+		const auto setEgidResult = setegid(effective);
+		assert(setEgidResult == 0);
+		assert_gid_state({before.real, effective, saved});
+		const auto setEgidResult2 = setegid(before.real);
+		assert(setEgidResult2 == 0);
+		assert_gid_state({before.real, before.real, saved});
+		const auto setEgidResult3 = setegid(saved);
+		assert(setEgidResult3 == 0);
+		assert_gid_state({before.real, saved, saved});
+	});
+}))
+
+DEFINE_TEST(setuid_real_root_is_unprivileged, ([] {
+	run_with_real_root_only([](uid_t dropped, uid_t unrelated) {
+		// Merely matching the effective UID is insufficient for setuid().
+		errno = 0;
+		const auto effectiveOnly = setuid(dropped);
+		assert_permission_failure(effectiveOnly);
+		assert_uid_state({0, dropped, 0});
+
+		errno = 0;
+		const auto arbitrary = setuid(unrelated);
+		assert_permission_failure(arbitrary);
+		assert_uid_state({0, dropped, 0});
+
+		// Make the dropped ID a saved ID, then setuid() may select it, but
+		// must preserve real and saved IDs rather than replacing all three.
+		const auto save = setresuid(no_change_id<uid_t>(), no_change_id<uid_t>(), dropped);
+		assert(save == 0);
+		const auto selectSaved = setuid(dropped);
+		assert(selectSaved == 0);
+		assert_uid_state({0, dropped, dropped});
+
+		const auto restore = setuid(0);
+		assert(restore == 0);
+		assert_uid_state({0, 0, dropped});
+	});
+}))
+
+DEFINE_TEST(setreuid_real_root_is_unprivileged, ([] {
+	run_with_real_root_only([](uid_t dropped, uid_t unrelated) {
+		errno = 0;
+		const auto real = setreuid(unrelated, no_change_id<uid_t>());
+		assert_permission_failure(real);
+		assert_uid_state({0, dropped, 0});
+
+		errno = 0;
+		const auto effective = setreuid(no_change_id<uid_t>(), unrelated);
+		assert_permission_failure(effective);
+		assert_uid_state({0, dropped, 0});
+
+		// Changing the real ID to the old effective ID is allowed on Linux.
+		const auto selectEffective = setreuid(dropped, no_change_id<uid_t>());
+		assert(selectEffective == 0);
+		assert_uid_state({dropped, dropped, dropped});
+	});
+}))
+
+DEFINE_TEST(setresuid_real_root_is_unprivileged, ([] {
+	run_with_real_root_only([](uid_t dropped, uid_t unrelated) {
+		const auto unchanged = no_change_id<uid_t>();
+		const UidState requests[] = {
+			{unrelated, unchanged, unchanged},
+			{unchanged, unrelated, unchanged},
+			{unchanged, unchanged, unrelated},
+			// Check failure is atomic even if another requested change is allowed.
+			{dropped, unrelated, dropped}
+		};
+		for(auto request : requests) {
+			errno = 0;
+			const auto result = setresuid(request.real, request.effective, request.saved);
+			assert_permission_failure(result);
+			assert_uid_state({0, dropped, 0});
+		}
+
+		const auto restore = setresuid(dropped, 0, dropped);
+		assert(restore == 0);
+		assert_uid_state({dropped, 0, dropped});
+		// Effective root still permits privileged changes with a nonroot real UID.
+		const auto privileged = setuid(unrelated);
+		assert(privileged == 0);
+		assert_uid_state({unrelated, unrelated, unrelated});
+	});
+}))
+
+DEFINE_TEST(setgid_real_root_is_unprivileged, ([] {
+	const auto before = get_gid_state();
+	gid_t unrelated;
+	if(!choose_other("/proc/self/gid_map", before.real, before.effective, before.saved, unrelated))
+		skip_test("no alternative mapped GID");
+
+	run_with_real_root_only([=](uid_t, uid_t) {
+		errno = 0;
+		const auto arbitrary = setgid(unrelated);
+		assert_permission_failure(arbitrary);
+		assert_gid_state(before);
+
+		const auto selectSaved = setgid(before.saved);
+		assert(selectSaved == 0);
+		assert_gid_state({before.real, before.saved, before.saved});
+	});
+}))
+
+DEFINE_TEST(setregid_real_root_is_unprivileged, ([] {
+	const auto before = get_gid_state();
+	gid_t unrelated;
+	if(!choose_other("/proc/self/gid_map", before.real, before.effective, before.saved, unrelated))
+		skip_test("no alternative mapped GID");
+
+	run_with_real_root_only([=](uid_t, uid_t) {
+		errno = 0;
+		const auto real = setregid(unrelated, no_change_id<gid_t>());
+		assert_permission_failure(real);
+		assert_gid_state(before);
+
+		errno = 0;
+		const auto effective = setregid(no_change_id<gid_t>(), unrelated);
+		assert_permission_failure(effective);
+		assert_gid_state(before);
+	});
+}))
+
+DEFINE_TEST(setresgid_real_root_is_unprivileged, ([] {
+	const auto before = get_gid_state();
+	gid_t unrelated;
+	if(!choose_other("/proc/self/gid_map", before.real, before.effective, before.saved, unrelated))
+		skip_test("no alternative mapped GID");
+
+	run_with_real_root_only([=](uid_t, uid_t) {
+		const auto unchanged = no_change_id<gid_t>();
+		const GidState requests[] = {
+			{unrelated, unchanged, unchanged},
+			{unchanged, unrelated, unchanged},
+			{unchanged, unchanged, unrelated},
+			{before.effective, unrelated, before.real}
+		};
+		for(auto request : requests) {
+			errno = 0;
+			const auto result = setresgid(request.real, request.effective, request.saved);
+			assert_permission_failure(result);
 			assert_gid_state(before);
 		}
 	});
