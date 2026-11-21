@@ -4,11 +4,15 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <cstdlib>
 #include <cstdint>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/prctl.h>
+#include <sys/stat.h>
+#include <string>
 #include <unistd.h>
 
 #include "testsuite.hpp"
@@ -107,6 +111,73 @@ void assert_permission_failure(int result) {
 	assert(errno == EPERM);
 }
 
+void check_retained_procfs_directory_owner(int flags) {
+	if(geteuid() != 0)
+		skip_test("requires effective UID 0");
+	uid_t otherUid;
+	gid_t otherGid;
+	const auto beforeGid = get_gid_state();
+	if(!choose_other("/proc/self/uid_map", uid_t{0}, uid_t{0}, uid_t{0}, otherUid)
+			|| !choose_other("/proc/self/gid_map", beforeGid.real, beforeGid.effective,
+				beforeGid.saved, otherGid))
+		skip_test("requires alternative mapped UID and GID");
+
+	int ready[2];
+	int release[2];
+	const auto pipeResult = pipe(ready);
+	assert(pipeResult == 0);
+	const auto pipeResult2 = pipe(release);
+	assert(pipeResult2 == 0);
+	pid_t child = fork();
+	assert(child >= 0);
+	if(!child) {
+		close(ready[0]);
+		close(release[1]);
+		const auto setResgidResult = setresgid(beforeGid.real, otherGid, beforeGid.saved);
+		assert(setResgidResult == 0);
+		const auto setResuidResult = setresuid(0, otherUid, 0);
+		assert(setResuidResult == 0);
+		const auto writeResult = write(ready[1], "x", 1);
+		assert(writeResult == 1);
+		char byte;
+		const auto readResult = read(release[0], &byte, 1);
+		assert(readResult == 1);
+		_exit(EXIT_SUCCESS);
+	}
+	close(ready[1]);
+	close(release[0]);
+	char byte;
+	const auto readResult = read(ready[0], &byte, 1);
+	assert(readResult == 1);
+	close(ready[0]);
+
+	const auto base = "/proc/" + std::to_string(child);
+	const std::string paths[] = {base + "/task", base + "/fdinfo"};
+	int fds[2];
+	for(int i = 0; i < 2; ++i) {
+		// Do not stat these inodes until after reaping: lookup/open itself
+		// must update their retained ownership from the child's current IDs.
+		fds[i] = open(paths[i].c_str(), flags | O_DIRECTORY);
+		assert(fds[i] >= 0);
+	}
+	const auto writeResult = write(release[1], "x", 1);
+	assert(writeResult == 1);
+	close(release[1]);
+	int status;
+	const auto waitPidResult = waitpid(child, &status, 0);
+	assert(waitPidResult == child);
+	assert(WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS);
+	for(auto fd : fds) {
+		struct stat stats;
+		const auto fstatResult = fstat(fd, &stats);
+		assert(fstatResult == 0);
+		assert(stats.st_uid == otherUid);
+		assert(stats.st_gid == otherGid);
+		const auto closeResult = close(fd);
+		assert(closeResult == 0);
+	}
+}
+
 template<typename F>
 void run_in_child(F &&function) {
 	pid_t child = fork();
@@ -139,6 +210,78 @@ DEFINE_TEST(getresgid, ([] {
 	const auto effective = getegid();
 	assert(state.real == real);
 	assert(state.effective == effective);
+}))
+
+DEFINE_TEST(procfs_directory_owner_retained_on_open, ([] {
+	check_retained_procfs_directory_owner(O_RDONLY);
+}))
+
+DEFINE_TEST(procfs_directory_owner_retained_on_lookup, ([] {
+	// O_PATH bypasses the node's open implementation, so lookup must refresh it.
+	check_retained_procfs_directory_owner(O_PATH);
+}))
+
+DEFINE_TEST(exec_resets_dumpability, ([] {
+	constexpr char reexec[] = "POSIX_TEST_EXEC_RESETS_DUMPABILITY";
+	if(getenv(reexec)) {
+		assert(prctl(PR_GET_DUMPABLE) == 1);
+		return;
+	}
+	if(getuid() != geteuid() || getgid() != getegid())
+		skip_test("requires matching real and effective IDs");
+
+	run_in_child([&] {
+		assert(prctl(PR_SET_DUMPABLE, 0L) == 0);
+		assert(prctl(PR_GET_DUMPABLE) == 0);
+		assert(setenv(reexec, "1", 1) == 0);
+		execl("/proc/self/exe", "posix-tests", "exec_resets_dumpability", nullptr);
+		perror("execl");
+		_exit(EXIT_FAILURE);
+	});
+}))
+
+DEFINE_TEST(effective_ids_reset_dumpability, ([] {
+	const auto beforeUid = get_uid_state();
+	const auto beforeGid = get_gid_state();
+	if(beforeUid.effective != 0)
+		skip_test("requires effective UID 0");
+	uid_t otherUid;
+	gid_t otherGid;
+	if(!choose_other("/proc/self/uid_map", beforeUid.real, beforeUid.effective,
+			beforeUid.saved, otherUid)
+			|| !choose_other("/proc/self/gid_map", beforeGid.real, beforeGid.effective,
+				beforeGid.saved, otherGid))
+		skip_test("no alternative mapped IDs");
+
+	run_in_child([=] {
+		const auto setDumpableResult = prctl(PR_SET_DUMPABLE, 1L);
+		assert(setDumpableResult == 0);
+		const auto sameGid = setresgid(no_change_id<gid_t>(), beforeGid.effective,
+				no_change_id<gid_t>());
+		assert(sameGid == 0);
+		const auto getDumpableResult = prctl(PR_GET_DUMPABLE);
+		assert(getDumpableResult == 1);
+		const auto changeGid = setresgid(no_change_id<gid_t>(), otherGid,
+				no_change_id<gid_t>());
+		assert(changeGid == 0);
+		const auto getDumpableResult2 = prctl(PR_GET_DUMPABLE);
+		assert(getDumpableResult2 == 0);
+
+		const auto setDumpableResult2 = prctl(PR_SET_DUMPABLE, 1L);
+		assert(setDumpableResult2 == 0);
+		const auto changeUid = setresuid(no_change_id<uid_t>(), otherUid,
+				no_change_id<uid_t>());
+		assert(changeUid == 0);
+		const auto getDumpableResult3 = prctl(PR_GET_DUMPABLE);
+		assert(getDumpableResult3 == 0);
+		const auto setDumpableResult3 = prctl(PR_SET_DUMPABLE, 1L);
+		assert(setDumpableResult3 == 0);
+		const auto sameUid = setresuid(no_change_id<uid_t>(), otherUid,
+				no_change_id<uid_t>());
+		assert(sameUid == 0);
+		const auto getDumpableResult4 = prctl(PR_GET_DUMPABLE);
+		assert(getDumpableResult4 == 1);
+	});
 }))
 
 DEFINE_TEST(setuid_drops_saved_uid, ([] {

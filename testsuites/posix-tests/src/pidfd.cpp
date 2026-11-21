@@ -3,6 +3,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <sys/eventfd.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -36,6 +37,11 @@ DEFINE_TEST(pidfd_poll, ([] {
 	assert(errno == ESPIPE);
 
 #if defined(__managarm__)
+	struct stat stats;
+	assert(fstat(pidfd, &stats) == 0);
+	assert(S_ISREG(stats.st_mode));
+	assert((stats.st_mode & 07777) == 0700);
+
 	pid_t outpid = pidfd_getpid(pidfd);
 	assert(outpid == child);
 #endif
