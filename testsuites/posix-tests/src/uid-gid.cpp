@@ -4,6 +4,7 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <grp.h>
 #include <fcntl.h>
 #include <cstdlib>
 #include <cstdint>
@@ -678,5 +679,70 @@ DEFINE_TEST(setresgid_real_root_is_unprivileged, ([] {
 			assert_permission_failure(result);
 			assert_gid_state(before);
 		}
+	});
+}))
+
+DEFINE_TEST(setgroups_requires_effective_root, ([] {
+	if(geteuid() != 0)
+		skip_test("requires effective UID 0");
+	uid_t dropped;
+	const auto initialGroup = getegid();
+	gid_t otherGroup;
+	if(!choose_other("/proc/self/uid_map", uid_t{0}, uid_t{0}, uid_t{0}, dropped)
+			|| !choose_other("/proc/self/gid_map", initialGroup, initialGroup,
+				initialGroup, otherGroup))
+		skip_test("requires alternative mapped UID and GID");
+
+	// Linux user namespaces can forbid setgroups even for namespace root.
+	if(FILE *file = fopen("/proc/self/setgroups", "r")) {
+		char policy[16] = {};
+		const auto read = fscanf(file, "%15s", policy);
+		fclose(file);
+		if(read == 1 && !strcmp(policy, "deny"))
+			skip_test("setgroups disabled in this user namespace");
+	}
+
+	run_in_child([=] {
+		auto assert_group = [](gid_t expected) {
+			const auto getGroupsResult = getgroups(0, nullptr);
+			assert(getGroupsResult == 1);
+			gid_t actual;
+			const auto getGroupsResult2 = getgroups(1, &actual);
+			assert(getGroupsResult2 == 1);
+			assert(actual == expected);
+		};
+
+		const auto setGroupsResult = setgroups(1, &initialGroup);
+		assert(setGroupsResult == 0);
+		assert_group(initialGroup);
+		const auto setResuidResult = setresuid(0, dropped, 0);
+		assert(setResuidResult == 0);
+		assert_uid_state({0, dropped, 0});
+
+		// Real and saved root must not authorize replacing or clearing groups,
+		// even when the requested list matches the current one.
+		const gid_t requests[] = {otherGroup, initialGroup};
+		for(auto group : requests) {
+			errno = 0;
+			const auto result = setgroups(1, &group);
+			assert_permission_failure(result);
+			assert_group(initialGroup);
+		}
+		errno = 0;
+		const auto clear = setgroups(0, nullptr);
+		assert_permission_failure(clear);
+		assert_group(initialGroup);
+
+		// Effective root can replace and clear groups with a nonroot real UID.
+		const auto setResuidResult2 = setresuid(dropped, 0, 0);
+		assert(setResuidResult2 == 0);
+		assert_uid_state({dropped, 0, 0});
+		const auto setGroupsResult2 = setgroups(1, &otherGroup);
+		assert(setGroupsResult2 == 0);
+		assert_group(otherGroup);
+		const auto setGroupsResult3 = setgroups(0, nullptr);
+		assert(setGroupsResult3 == 0);
+		const auto getGroupsResult = getgroups(0, nullptr);
+		assert(getGroupsResult == 0);
 	});
 }))
