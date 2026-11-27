@@ -37,6 +37,28 @@ void create_file(const std::string &path) {
 
 } // namespace
 
+DEFINE_TEST(mkdir_inherits_setgid_only_from_parent, ([] {
+	auto dir = make_scratch();
+	auto explicitSetgid = dir + "/explicit";
+	auto inheritedSetgid = dir + "/inherited";
+	frg::scope_exit cleanup{[&] {
+		rmdir(explicitSetgid.c_str());
+		rmdir(inheritedSetgid.c_str());
+		rmdir(dir.c_str());
+	}};
+
+	assert(chmod(dir.c_str(), 0700) == 0);
+	assert(mkdir(explicitSetgid.c_str(), S_ISGID | 0700) == 0);
+	struct stat stats;
+	assert(stat(explicitSetgid.c_str(), &stats) == 0);
+	assert(!(stats.st_mode & S_ISGID));
+
+	assert(chmod(dir.c_str(), S_ISGID | 0700) == 0);
+	assert(mkdir(inheritedSetgid.c_str(), 0700) == 0);
+	assert(stat(inheritedSetgid.c_str(), &stats) == 0);
+	assert(stats.st_mode & S_ISGID);
+}))
+
 // The expected errnos match Linux.
 
 DEFINE_TEST(rmdir_rename_mount_point, ([] {
